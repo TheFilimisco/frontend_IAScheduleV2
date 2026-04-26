@@ -95,8 +95,7 @@ export function SidePanel({
                       return (
                         <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                           <div
-                            onClick={() => onItemClick && onItemClick(section.title, item)}
-                            className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-colors border-l-4 ${
+                            className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors border-l-4 ${
                               isActive ? 'bg-[#222222] hover:bg-[#2a2a2a]' : 'bg-[#333333] hover:bg-[#444444]'
                             } text-white`}
                             style={{ borderLeftColor: borderColor }}
@@ -122,8 +121,7 @@ export function SidePanel({
                     return (
                       <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                         <div
-                          onClick={() => onItemClick && onItemClick(section.title, item)}
-                          className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-colors ${
+                          className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors ${
                             isActive ? 'bg-[#222222] border-l-4 border-blue-500' : 'bg-[#333333] hover:bg-[#444444]'
                           } text-white`}
                         >

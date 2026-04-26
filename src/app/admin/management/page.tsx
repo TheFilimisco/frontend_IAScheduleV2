@@ -1,131 +1,85 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
 import { DraggableItem } from "@/components/dnd/DraggableItem";
 import { CreateEmployeeModal } from "@/components/modals/CreateEmployeeModal";
 import { CreateDepartmentModal } from "@/components/modals/CreateDepartmentModal";
-import { CreateTaskModal } from "@/components/modals/CreateTaskModal";
+import { ManagementSection, PlusButton } from "./_components/ManagementSection";
+import { ManagementPill } from "./_components/ManagementPill";
+import { TasksSection, TaskItem } from "./_components/TasksSection";
+
+// Colores por departamento
+const DEPT_COLORS: Record<string, string> = {
+  "Design": "#2563eb",
+  "Marketing": "#db2777",
+  "Call Center": "#ea580c",
+};
+
+const TODAY_STR = new Date().toDateString();
 
 export default function AdminManagement() {
   const [prompt, setPrompt] = useState("");
 
-  const [sections, setSections] = useState([
-    { title: "Employees", items: ["Juan", "Carlos", "Gabriel"] },
-    { title: "Departaments", items: ["Design", "Marketing", "Call Center"] },
-    { title: "Tasks", items: ["Design Task 1", "Marketing Campaign", "Support Tickets"] }
+  const [employees, setEmployees] = useState(["Juan", "Carlos", "Gabriel"]);
+  const [departments, setDepartments] = useState(["Design", "Marketing", "Call Center"]);
+  const [tasks, setTasks] = useState<TaskItem[]>([
+    { title: "Design Task 1", dateStr: TODAY_STR },
+    { title: "Marketing Campaign", dateStr: TODAY_STR },
+    { title: "Support Tickets", dateStr: TODAY_STR },
   ]);
+  const [selectedDay, setSelectedDay] = useState(TODAY_STR);
 
-  // Configuración crucial para permitir hacer clics normales en los botones
-  // sin que dnd-kit crea que estás intentando arrastrarlos inmediatamente.
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5, // El arrastre solo inicia si te mueves 5px. Los clics pasan limpios.
-      },
-    })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-
-    if (over && over.id === "ai-input-dropzone") {
-      const droppedValue = active.data.current?.value;
-      if (droppedValue) {
-        setPrompt((prev) => (prev ? `${prev} @${droppedValue} ` : `@${droppedValue} `));
-      }
+    if (over?.id === "ai-input-dropzone") {
+      const v = active.data.current?.value;
+      if (v) setPrompt(prev => prev ? `${prev} @${v} ` : `@${v} `);
     }
   };
 
-  const handleSendPrompt = () => {
-    if (!prompt.trim()) return;
-    console.log("Sending to AI:", prompt);
-    setPrompt("");
+  // --- Employees CRUD ---
+  const createEmployee = (d: any) => {
+    const n = d.firstName || d.name;
+    if (n) setEmployees(p => [...p, n]);
+  };
+  const updateEmployee = (old: string, d: any) => {
+    const n = d.firstName || d.name;
+    if (n) setEmployees(p => p.map(i => i === old ? n : i));
+  };
+  const deleteEmployee = (e: React.MouseEvent, item: string) => {
+    e.stopPropagation();
+    setEmployees(p => p.filter(i => i !== item));
   };
 
-  // ----- CRUD Local (Manejo de estado) -----
-  const handleDelete = (e: React.MouseEvent, type: string, itemToDelete: string) => {
-    e.stopPropagation(); // Evita que se abra el modal de edición
-    setSections(prev => prev.map(sec => 
-      sec.title === type ? { ...sec, items: sec.items.filter(item => item !== itemToDelete) } : sec
+  // --- Departments CRUD ---
+  const createDepartment = (d: any) => {
+    if (d.name) setDepartments(p => [...p, d.name]);
+  };
+  const updateDepartment = (old: string, d: any) => {
+    if (d.name) setDepartments(p => p.map(i => i === old ? d.name : i));
+  };
+  const deleteDepartment = (e: React.MouseEvent, item: string) => {
+    e.stopPropagation();
+    setDepartments(p => p.filter(i => i !== item));
+  };
+
+  // --- Tasks CRUD ---
+  const createTask = (d: any) => {
+    if (d.title) setTasks(p => [...p, { title: d.title, dateStr: selectedDay }]);
+  };
+  const updateTask = (old: string, d: any) => {
+    if (d.title) setTasks(p => p.map(t =>
+      t.title === old && t.dateStr === selectedDay ? { ...t, title: d.title } : t
     ));
-    console.log(`Deleted ${type}: ${itemToDelete}`);
   };
-
-  const handleCreate = (type: string, data: any) => {
-    const itemName = data.firstName || data.name || data.title;
-    if (!itemName) return;
-    setSections(prev => prev.map(sec => 
-      sec.title === type ? { ...sec, items: [...sec.items, itemName] } : sec
-    ));
-    console.log(`Created ${type}:`, data);
-  };
-
-  const handleUpdate = (type: string, oldItemName: string, data: any) => {
-    const newItemName = data.firstName || data.name || data.title;
-    if (!newItemName) return;
-    setSections(prev => prev.map(sec => 
-      sec.title === type ? { 
-        ...sec, 
-        items: sec.items.map(item => item === oldItemName ? newItemName : item) 
-      } : sec
-    ));
-    console.log(`Updated ${type}:`, data);
-  };
-
-  // ----- Renders -----
-  const renderAddButton = (title: string) => {
-    const buttonElement = (
-      <button className="bg-white rounded-full w-10 h-10 flex items-center justify-center shadow-md hover:bg-gray-100 transition-colors">
-        <Plus size={20} className="text-black" />
-      </button>
-    );
-
-    switch (title) {
-      case "Employees":
-        return <CreateEmployeeModal onSave={(data) => handleCreate(title, data)}>{buttonElement}</CreateEmployeeModal>;
-      case "Departaments":
-        return <CreateDepartmentModal onSave={(data) => handleCreate(title, data)}>{buttonElement}</CreateDepartmentModal>;
-      case "Tasks":
-        return <CreateTaskModal onSave={(data) => handleCreate(title, data)}>{buttonElement}</CreateTaskModal>;
-      default:
-        return buttonElement;
-    }
-  };
-
-  const renderEditablePill = (type: string, item: string) => {
-    // Mock initialData based on just the name string we have right now
-    const initialData = type === "Employees" ? { firstName: item } :
-                        type === "Departaments" ? { name: item } :
-                        { title: item };
-
-    const pillContent = (
-      <div className="bg-[#222222] text-white px-4 py-3 rounded-lg flex justify-between items-center text-sm shadow-md w-[250px] cursor-pointer hover:bg-[#333333] transition-colors">
-        <span>{item}</span>
-        <button 
-          type="button"
-          onClick={(e) => handleDelete(e, type, item)}
-          onPointerDown={(e) => e.stopPropagation()} // Previene que Base UI abra el Modal al clickear X
-          className="text-gray-400 hover:text-red-400 hover:border-red-400 bg-transparent border border-gray-500 rounded-full p-0.5 ml-4 transition-colors"
-        >
-          <X size={14} />
-        </button>
-      </div>
-    );
-
-    switch (type) {
-      case "Employees":
-        return <CreateEmployeeModal initialData={initialData} onSave={(data) => handleUpdate(type, item, data)}>{pillContent}</CreateEmployeeModal>;
-      case "Departaments":
-        return <CreateDepartmentModal initialData={initialData} onSave={(data) => handleUpdate(type, item, data)}>{pillContent}</CreateDepartmentModal>;
-      case "Tasks":
-        return <CreateTaskModal initialData={initialData} onSave={(data) => handleUpdate(type, item, data)}>{pillContent}</CreateTaskModal>;
-      default:
-        return pillContent;
-    }
+  const deleteTask = (e: React.MouseEvent, title: string) => {
+    e.stopPropagation();
+    setTasks(p => p.filter(t => !(t.title === title && t.dateStr === selectedDay)));
   };
 
   return (
@@ -133,38 +87,61 @@ export default function AdminManagement() {
       <Navbar role="admin" />
 
       <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
-        <main className="flex-1 flex flex-col gap-6 px-10 pt-4 max-w-5xl w-full">
-          {sections.map((section) => (
-            <div key={section.title} className="flex flex-col">
-              {/* Botón de añadir (+) */}
-              <div className="mb-2">
-                {renderAddButton(section.title)}
-              </div>
+        <main className="flex-1 flex flex-col items-center gap-6 px-10 pt-4 w-full">
 
-              {/* Contenedor principal de la sección */}
-              <div className="rounded-xl overflow-hidden shadow-lg flex flex-col">
-                {/* Header oscuro */}
-                <div className="bg-[#1a1a1a] text-white px-6 py-4 font-bold text-lg">
-                  {section.title}
-                </div>
-                
-                {/* Cuerpo gris */}
-                <div className="bg-[#999999] p-6 min-h-[120px] flex flex-col gap-3">
-                  {section.items.map((item, idx) => {
-                    const dragId = `drag-manage-${section.title}-${item}-${idx}`;
-                    return (
-                      <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
-                        {renderEditablePill(section.title, item)}
-                      </DraggableItem>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ))}
+          {/* ── Tasks ── */}
+          <TasksSection
+            tasks={tasks}
+            selectedDay={selectedDay}
+            onSelectDay={setSelectedDay}
+            onCreate={createTask}
+            onUpdate={updateTask}
+            onDelete={deleteTask}
+          />
+
+          {/* ── Employees ── */}
+          <ManagementSection
+            title="Employees"
+            addButton={
+              <CreateEmployeeModal onSave={createEmployee}>
+                <PlusButton />
+              </CreateEmployeeModal>
+            }
+          >
+            {employees.map((item, idx) => (
+              <DraggableItem key={idx} id={`drag-E-${item}-${idx}`} data={{ type: "Employees", value: item }}>
+                <CreateEmployeeModal initialData={{ firstName: item }} onSave={d => updateEmployee(item, d)}>
+                  <ManagementPill label={item} onDelete={e => deleteEmployee(e, item)} />
+                </CreateEmployeeModal>
+              </DraggableItem>
+            ))}
+          </ManagementSection>
+
+          {/* ── Departaments ── */}
+          <ManagementSection
+            title="Departaments"
+            addButton={
+              <CreateDepartmentModal onSave={createDepartment}>
+                <PlusButton />
+              </CreateDepartmentModal>
+            }
+          >
+            {departments.map((item, idx) => (
+              <DraggableItem key={idx} id={`drag-D-${item}-${idx}`} data={{ type: "Departaments", value: item }}>
+                <CreateDepartmentModal initialData={{ name: item }} onSave={d => updateDepartment(item, d)}>
+                  <ManagementPill
+                    label={item}
+                    onDelete={e => deleteDepartment(e, item)}
+                    borderColor={DEPT_COLORS[item] ?? "#6b7280"}
+                  />
+                </CreateDepartmentModal>
+              </DraggableItem>
+            ))}
+          </ManagementSection>
+
         </main>
 
-        <BottomAIBar prompt={prompt} setPrompt={setPrompt} onSend={handleSendPrompt} />
+        <BottomAIBar prompt={prompt} setPrompt={setPrompt} onSend={() => { if (prompt.trim()) { console.log("AI:", prompt); setPrompt(""); } }} />
       </DndContext>
     </div>
   );

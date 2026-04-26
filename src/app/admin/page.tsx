@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDroppable } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDroppable, useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
 import { SidePanel } from "@/components/dashboard/SidePanel";
@@ -34,6 +35,34 @@ const DroppableCell = forwardRef<HTMLDivElement, { id: string, children?: React.
   }
 );
 DroppableCell.displayName = "DroppableCell";
+
+// Tarea del calendario que se puede arrastrar a otra celda
+function DraggableTask({ id, style: externalStyle, children }: { id: number; style?: React.CSSProperties; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `calendar-task-${id}`,
+    data: { type: "calendar-task", taskId: id },
+  });
+
+  const style: React.CSSProperties = {
+    ...externalStyle,
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.55 : 1,
+    zIndex: isDragging ? 100 : 10,
+    cursor: isDragging ? "grabbing" : "grab",
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className="absolute top-2 bottom-2"
+    >
+      {children}
+    </div>
+  );
+}
 
 // Contenedor general del calendario para dropear Departamentos/Empleados enteros
 function CalendarDropzone({ children }: { children: React.ReactNode }) {
@@ -143,8 +172,23 @@ export default function AdminDashboard() {
     // Filtrar tareas por la fecha seleccionada localmente para chequeos
     const currentDayTasks = tasksData.filter(t => t.dateStr === currentDate.toDateString());
 
-    // 2. Soltar en una celda horaria específica (para asignar tarea)
+    // 2. Soltar en una celda horaria específica
     if (over.id.toString().startsWith("cell-")) {
+      const [_, emp, hourStr] = over.id.toString().split("-");
+      const hour = parseInt(hourStr, 10);
+
+      // 2a. Mover tarea ya existente en el calendario
+      if (active.data.current?.type === "calendar-task") {
+        const taskId = active.data.current?.taskId as number;
+        setTasksData(prev =>
+          prev.map(t =>
+            t.id === taskId ? { ...t, employee: emp, startHour: hour } : t
+          )
+        );
+        return;
+      }
+
+      // 2b. Asignar nueva tarea desde el panel lateral
       if (active.data.current?.type === "Tasks") {
         const taskName = active.data.current?.value;
 
@@ -153,9 +197,6 @@ export default function AdminDashboard() {
           showError(`🚫 La tarea "${taskName}" ya ha sido asignada a alguien más hoy. Las tareas son exclusivas y no se pueden compartir.`);
           return;
         }
-
-        const [_, emp, hourStr] = over.id.toString().split("-");
-        const hour = parseInt(hourStr, 10);
 
         setTasksData(prev => [
           ...prev,
@@ -362,27 +403,29 @@ export default function AdminDashboard() {
                           const widthPercent = (task.duration / hours.length) * 100;
 
                           return (
-                            <ViewTaskModal key={task.id} task={task}>
-                              <div
-                                className="absolute top-2 bottom-2 rounded-lg text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap z-10 group/task hover:brightness-110 transition-all cursor-pointer"
-                                style={{
-                                  left: `${leftPercent}%`,
-                                  width: `${widthPercent}%`,
-                                  backgroundColor: getEmployeeDeptColor(task.employee)
-                                }}
-                              >
-                                <span className="font-semibold text-xs tracking-wide truncate px-1 flex-1">{task.title}</span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setTasksData(prev => prev.filter(t => t.id !== task.id));
-                                  }}
-                                  className="opacity-0 group-hover/task:opacity-100 text-white hover:text-red-200 transition-opacity bg-black/20 hover:bg-black/40 rounded-full p-0.5 ml-1 shrink-0"
+                            <DraggableTask
+                              key={task.id}
+                              id={task.id}
+                              style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                            >
+                              <ViewTaskModal task={task}>
+                                <div
+                                  className="rounded-lg text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap w-full h-full group/task hover:brightness-110 transition-all"
+                                  style={{ backgroundColor: getEmployeeDeptColor(task.employee) }}
                                 >
-                                  <X size={12} />
-                                </button>
-                              </div>
-                            </ViewTaskModal>
+                                  <span className="font-semibold text-xs tracking-wide truncate px-1 flex-1">{task.title}</span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setTasksData(prev => prev.filter(t => t.id !== task.id));
+                                    }}
+                                    className="opacity-0 group-hover/task:opacity-100 text-white hover:text-red-200 transition-opacity bg-black/20 hover:bg-black/40 rounded-full p-0.5 ml-1 shrink-0"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                              </ViewTaskModal>
+                            </DraggableTask>
                           );
                         })}
                       </div>
