@@ -14,7 +14,7 @@ import { forwardRef } from "react";
 const DroppableCell = forwardRef<HTMLDivElement, { id: string, children?: React.ReactNode }>(
   ({ id, children, ...props }, ref) => {
     const { setNodeRef, isOver } = useDroppable({ id });
-    
+
     // Combinar referencias (dnd-kit + Base UI)
     const handleRef = (node: HTMLDivElement) => {
       setNodeRef(node);
@@ -23,8 +23,8 @@ const DroppableCell = forwardRef<HTMLDivElement, { id: string, children?: React.
     };
 
     return (
-      <div 
-        ref={handleRef} 
+      <div
+        ref={handleRef}
         {...props}
         className={`flex-1 border-r border-gray-50 last:border-r-0 relative cursor-pointer transition-colors ${isOver ? 'bg-blue-100/50' : 'hover:bg-gray-100'}`}
       >
@@ -47,7 +47,7 @@ function CalendarDropzone({ children }: { children: React.ReactNode }) {
 
 export default function AdminDashboard() {
   const [prompt, setPrompt] = useState("");
-  
+
   // Estado de Fecha
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -65,6 +65,13 @@ export default function AdminDashboard() {
     { id: 4, employee: "Gabriel", title: "Ads Setup", description: "Configure Google Ads and Facebook Meta Business for the upcoming launch.", startHour: 10, duration: 2, color: "bg-green-500", dateStr: new Date().toDateString() },
   ]);
 
+  // Color predefinido por departamento (hex)
+  const deptColorMap: Record<string, string> = {
+    "Design":     "#2563eb", // blue-600
+    "Marketing":  "#db2777", // pink-600
+    "Call Center":"#ea580c", // orange-600
+  };
+
   const adminSections = [
     { title: "Departaments", items: ["Design", "Marketing", "Call Center"] },
     { title: "Employees", items: ["Juan", "Carlos", "Gabriel", "Ana", "Luis", "Maria"] },
@@ -72,9 +79,15 @@ export default function AdminDashboard() {
   ];
 
   const employeesByDept: Record<string, string[]> = {
-    "Design": ["Juan", "Carlos"],
-    "Marketing": ["Gabriel", "Ana"],
-    "Call Center": ["Luis", "Maria"]
+    "Design":     ["Juan", "Carlos"],
+    "Marketing":  ["Gabriel", "Ana"],
+    "Call Center":["Luis", "Maria"]
+  };
+
+  // Utilidad: color del departamento al que pertenece un empleado
+  const getEmployeeDeptColor = (emp: string): string => {
+    const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(emp));
+    return dept ? (deptColorMap[dept] ?? "#374151") : "#374151";
   };
 
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
@@ -98,11 +111,11 @@ export default function AdminDashboard() {
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
 
   const formatDate = (date: Date) => {
-    const formatter = new Intl.DateTimeFormat('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
     return formatter.format(date);
   };
@@ -134,7 +147,7 @@ export default function AdminDashboard() {
     if (over.id.toString().startsWith("cell-")) {
       if (active.data.current?.type === "Tasks") {
         const taskName = active.data.current?.value;
-        
+
         // Validación: Tareas exclusivas por día
         if (currentDayTasks.some(t => t.title === taskName)) {
           showError(`🚫 La tarea "${taskName}" ya ha sido asignada a alguien más hoy. Las tareas son exclusivas y no se pueden compartir.`);
@@ -143,9 +156,9 @@ export default function AdminDashboard() {
 
         const [_, emp, hourStr] = over.id.toString().split("-");
         const hour = parseInt(hourStr, 10);
-        
+
         setTasksData(prev => [
-          ...prev, 
+          ...prev,
           { id: Date.now(), employee: emp, title: taskName, description: "", startHour: hour, duration: 1, color: "bg-yellow-600", dateStr: currentDate.toDateString() }
         ]);
         console.log(`Assigned task ${taskName} to ${emp} at ${hour}:00 on ${currentDate.toDateString()}`);
@@ -157,18 +170,18 @@ export default function AdminDashboard() {
     if (over.id === "calendar-dropzone" || over.id.toString().startsWith("cell-")) {
       const type = active.data.current?.type;
       const value = active.data.current?.value;
-      
+
       if (type === "Departaments") {
         setCurrentDepartment(value);
         setEmployeesList(employeesByDept[value] || []);
         console.log(`Filtered calendar by department: ${value}`);
       } else if (type === "Employees") {
-        
+
         // Validación: Empleado no puede estar en más de un departamento
         const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(value));
         if (currentDepartment && dept && dept !== currentDepartment) {
-           showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
-           return;
+          showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
+          return;
         }
 
         if (!employeesList.includes(value)) {
@@ -181,7 +194,7 @@ export default function AdminDashboard() {
 
   const handleCreateTaskFromCell = (emp: string, hour: number, data: any) => {
     if (!data.title) return;
-    
+
     // Validación: Tareas exclusivas por día (incluso al crearlas)
     const currentDayTasks = tasksData.filter(t => t.dateStr === currentDate.toDateString());
     if (currentDayTasks.some(t => t.title === data.title)) {
@@ -206,12 +219,12 @@ export default function AdminDashboard() {
       setCurrentDepartment(value);
       setEmployeesList(employeesByDept[value] || []);
     } else if (type === "Employees") {
-      
+
       // Validación: Empleado no puede estar en más de un departamento
       const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(value));
       if (currentDepartment && dept && dept !== currentDepartment) {
-         showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
-         return;
+        showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
+        return;
       }
 
       if (!employeesList.includes(value)) {
@@ -240,7 +253,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#dfdfdf] flex flex-col relative">
       <Navbar role="admin" />
-      
+
       {/* Custom Error Pop-up / Toast */}
       {errorMsg && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white border-l-4 border-red-400 text-gray-800 px-6 py-4 rounded-sm shadow-xl font-medium text-sm flex items-center justify-between gap-4 min-w-[350px] animate-in fade-in slide-in-from-top-4">
@@ -256,14 +269,14 @@ export default function AdminDashboard() {
           {/* Lado Izquierdo: Calendario */}
           <div className="flex-1 min-w-0">
             <div className="bg-white rounded-2xl shadow-xl border border-gray-200 h-[650px] p-6 flex flex-col">
-              
+
               {/* Controles Superiores: Fecha y Departamento */}
               <div className="flex justify-between items-center mb-6">
-                
+
                 {/* Navegación de Fechas */}
                 <div className="flex items-center gap-4">
-                  <button 
-                    onClick={handlePrevDay} 
+                  <button
+                    onClick={handlePrevDay}
                     className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
                   >
                     <ChevronLeft size={24} />
@@ -271,25 +284,24 @@ export default function AdminDashboard() {
                   <h2 className="text-gray-800 text-xl font-bold min-w-[250px] text-center capitalize">
                     {formatDate(currentDate)}
                   </h2>
-                  <button 
-                    onClick={handleNextDay} 
+                  <button
+                    onClick={handleNextDay}
                     className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
                   >
                     <ChevronRight size={24} />
                   </button>
                 </div>
-                
+
                 {/* Placa Decorativa del Departamento con Colores Dinámicos */}
-                <div className={`px-6 py-2.5 rounded-lg font-bold shadow-md tracking-wide text-white transition-colors ${
-                  currentDepartment === "Design" ? "bg-blue-600" :
-                  currentDepartment === "Marketing" ? "bg-pink-600" :
-                  currentDepartment === "Call Center" ? "bg-orange-600" : "bg-gray-800"
-                }`}>
+                <div
+                  className="px-6 py-2.5 rounded-lg font-bold shadow-md tracking-wide text-white transition-colors"
+                  style={{ backgroundColor: deptColorMap[currentDepartment] ?? "#1f2937" }}
+                >
                   {currentDepartment}
                 </div>
 
               </div>
-              
+
               <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm text-gray-500 border border-gray-100 flex justify-between items-center">
                 <div>
                   <span className="font-semibold text-black mr-2">Vista Dinámica</span>
@@ -301,11 +313,10 @@ export default function AdminDashboard() {
               <CalendarDropzone>
                 <div className="min-w-[700px] relative">
                   {/* Header de Horas Dinámico con Color */}
-                  <div className={`flex border-b border-gray-200 sticky top-0 z-20 transition-colors ${
-                    currentDepartment === "Design" ? "bg-blue-50/80" :
-                    currentDepartment === "Marketing" ? "bg-pink-50/80" :
-                    currentDepartment === "Call Center" ? "bg-orange-50/80" : "bg-gray-50/80"
-                  } backdrop-blur-md`}>
+                  <div
+                    className="flex border-b border-gray-200 sticky top-0 z-20 transition-colors backdrop-blur-md"
+                    style={{ backgroundColor: (deptColorMap[currentDepartment] ?? "#6b7280") + "14" }}
+                  >
                     <div className="w-28 shrink-0 p-3 border-r border-gray-200 font-bold text-gray-700 text-sm flex items-center sticky left-0 z-30 bg-inherit">
                       Employees
                     </div>
@@ -322,22 +333,22 @@ export default function AdminDashboard() {
                       {/* Nombre del empleado con botón X */}
                       <div className="w-28 shrink-0 p-3 border-r border-gray-200 flex justify-between items-center text-sm font-semibold text-gray-800 bg-white group-hover:bg-gray-50 sticky left-0 z-10">
                         <span>{emp}</span>
-                        <button 
+                        <button
                           onClick={() => setEmployeesList(prev => prev.filter(e => e !== emp))}
                           className="text-gray-300 hover:text-red-500 transition-colors bg-gray-100 hover:bg-red-50 rounded-full p-1"
                         >
                           <X size={14} />
                         </button>
                       </div>
-                      
+
                       {/* Contenedor de las horas y tareas */}
                       <div className="flex-1 relative flex">
                         {/* Celdas Droppables para cada hora */}
                         {hours.map(h => (
                           <CreateTaskModal key={`modal-${emp}-${h}`} onSave={(data) => handleCreateTaskFromCell(emp, h, data)}>
                             <DroppableCell id={`cell-${emp}-${h}`}>
-                               {/* El área interactiva que dispara el modal (toda la celda) */}
-                               <div className="w-full h-full" />
+                              {/* El área interactiva que dispara el modal (toda la celda) */}
+                              <div className="w-full h-full" />
                             </DroppableCell>
                           </CreateTaskModal>
                         ))}
@@ -346,21 +357,25 @@ export default function AdminDashboard() {
                         {tasksForCurrentDate.filter(t => t.employee === emp).map(task => {
                           const startIdx = hours.indexOf(task.startHour);
                           if (startIdx === -1) return null;
-                          
+
                           const leftPercent = (startIdx / hours.length) * 100;
                           const widthPercent = (task.duration / hours.length) * 100;
 
                           return (
                             <ViewTaskModal key={task.id} task={task}>
-                              <div 
-                                className={`absolute top-2 bottom-2 rounded-lg ${task.color} text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap z-10 group/task hover:brightness-110 transition-all cursor-pointer`}
-                                style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                              <div
+                                className="absolute top-2 bottom-2 rounded-lg text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap z-10 group/task hover:brightness-110 transition-all cursor-pointer"
+                                style={{
+                                  left: `${leftPercent}%`,
+                                  width: `${widthPercent}%`,
+                                  backgroundColor: getEmployeeDeptColor(task.employee)
+                                }}
                               >
                                 <span className="font-semibold text-xs tracking-wide truncate px-1 flex-1">{task.title}</span>
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    setTasksData(prev => prev.filter(t => t.id !== task.id)); 
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTasksData(prev => prev.filter(t => t.id !== task.id));
                                   }}
                                   className="opacity-0 group-hover/task:opacity-100 text-white hover:text-red-200 transition-opacity bg-black/20 hover:bg-black/40 rounded-full p-0.5 ml-1 shrink-0"
                                 >
@@ -374,7 +389,7 @@ export default function AdminDashboard() {
                     </div>
                   )) : (
                     <div className="p-8 text-center text-gray-400 font-medium mt-10">
-                      No hay empleados en pantalla. <br/><br/> Haz clic en un Departamento desde el panel lateral.
+                      No hay empleados en pantalla. <br /><br /> Haz clic en un Departamento desde el panel lateral.
                     </div>
                   )}
                 </div>
@@ -385,11 +400,13 @@ export default function AdminDashboard() {
 
           {/* Lado Derecho: Side Panel */}
           <div className="w-80 shrink-0">
-            <SidePanel 
-              sections={adminSections} 
-              onItemClick={handleSidePanelClick} 
+            <SidePanel
+              sections={adminSections}
+              onItemClick={handleSidePanelClick}
               activeItems={activeItems}
               onRemoveItem={handleRemoveFromBoard}
+              deptColorMap={deptColorMap}
+              employeesByDept={employeesByDept}
             />
           </div>
         </main>

@@ -13,13 +13,22 @@ export function SidePanel({
   sections, 
   onItemClick, 
   activeItems = [], 
-  onRemoveItem 
+  onRemoveItem,
+  deptColorMap = {},
+  employeesByDept = {}
 }: { 
   sections: AccordionSection[], 
   onItemClick?: (type: string, value: string) => void,
   activeItems?: string[],
-  onRemoveItem?: (type: string, value: string) => void
+  onRemoveItem?: (type: string, value: string) => void,
+  deptColorMap?: Record<string, string>,
+  employeesByDept?: Record<string, string[]>
 }) {
+  // Devuelve el color del departamento al que pertenece un empleado
+  const getEmployeeDeptColor = (emp: string): string => {
+    const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(emp));
+    return dept ? (deptColorMap[dept] ?? "#374151") : "#374151";
+  };
   const [openSections, setOpenSections] = useState<string[]>(sections.map(s => s.title));
 
   const toggleSection = (title: string) => {
@@ -63,10 +72,56 @@ export function SidePanel({
                   .map((item, idx) => {
                     const dragId = `drag-${section.title}-${item}`;
                     const isActive = activeItems.includes(item) && (section.title === "Employees" || section.title === "Tasks");
-                    
+
+                    // -- Departamentos: fondo completo con su color predefinido
+                    if (section.title === "Departaments") {
+                      const deptColor = deptColorMap[item] ?? "#374151";
+                      return (
+                        <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
+                          <div
+                            onClick={() => onItemClick && onItemClick(section.title, item)}
+                            className="px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-all hover:brightness-110 text-white"
+                            style={{ backgroundColor: deptColor }}
+                          >
+                            <span>{item}</span>
+                          </div>
+                        </DraggableItem>
+                      );
+                    }
+
+                    // -- Empleados: fondo oscuro + borde izquierdo del color del departamento
+                    if (section.title === "Employees") {
+                      const borderColor = getEmployeeDeptColor(item);
+                      return (
+                        <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
+                          <div
+                            onClick={() => onItemClick && onItemClick(section.title, item)}
+                            className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-colors border-l-4 ${
+                              isActive ? 'bg-[#222222] hover:bg-[#2a2a2a]' : 'bg-[#333333] hover:bg-[#444444]'
+                            } text-white`}
+                            style={{ borderLeftColor: borderColor }}
+                          >
+                            <span>{item}</span>
+                            {isActive && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onRemoveItem) onRemoveItem(section.title, item);
+                                }}
+                                className="text-gray-400 hover:text-red-400 bg-[#111111] hover:bg-red-950 rounded-full p-0.5 border border-gray-600 transition-colors"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </DraggableItem>
+                      );
+                    }
+
+                    // -- Tareas: estilo oscuro original + borde azul si activa
                     return (
                       <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
-                        <div 
+                        <div
                           onClick={() => onItemClick && onItemClick(section.title, item)}
                           className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-colors ${
                             isActive ? 'bg-[#222222] border-l-4 border-blue-500' : 'bg-[#333333] hover:bg-[#444444]'
@@ -74,7 +129,7 @@ export function SidePanel({
                         >
                           <span>{item}</span>
                           {isActive && (
-                            <button 
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (onRemoveItem) onRemoveItem(section.title, item);
