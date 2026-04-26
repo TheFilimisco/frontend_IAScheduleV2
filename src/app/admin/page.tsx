@@ -96,9 +96,9 @@ export default function AdminDashboard() {
 
   // Color predefinido por departamento (hex)
   const deptColorMap: Record<string, string> = {
-    "Design":     "#2563eb", // blue-600
-    "Marketing":  "#db2777", // pink-600
-    "Call Center":"#ea580c", // orange-600
+    "Design": "#2563eb", // blue-600
+    "Marketing": "#db2777", // pink-600
+    "Call Center": "#ea580c", // orange-600
   };
 
   const adminSections = [
@@ -108,9 +108,9 @@ export default function AdminDashboard() {
   ];
 
   const employeesByDept: Record<string, string[]> = {
-    "Design":     ["Juan", "Carlos"],
-    "Marketing":  ["Gabriel", "Ana"],
-    "Call Center":["Luis", "Maria"]
+    "Design": ["Juan", "Carlos"],
+    "Marketing": ["Gabriel", "Ana"],
+    "Call Center": ["Luis", "Maria"]
   };
 
   // Utilidad: color del departamento al que pertenece un empleado
@@ -294,6 +294,8 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#dfdfdf] flex flex-col relative">
       <Navbar role="admin" />
+
+
 
       {/* Custom Error Pop-up / Toast */}
       {errorMsg && (
