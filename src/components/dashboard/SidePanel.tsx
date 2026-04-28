@@ -9,15 +9,15 @@ type AccordionSection = {
   items: string[];
 };
 
-export function SidePanel({ 
-  sections, 
-  onItemClick, 
-  activeItems = [], 
+export function SidePanel({
+  sections,
+  onItemClick,
+  activeItems = [],
   onRemoveItem,
   deptColorMap = {},
   employeesByDept = {}
-}: { 
-  sections: AccordionSection[], 
+}: {
+  sections: AccordionSection[],
   onItemClick?: (type: string, value: string) => void,
   activeItems?: string[],
   onRemoveItem?: (type: string, value: string) => void,
@@ -32,28 +32,28 @@ export function SidePanel({
   const [openSections, setOpenSections] = useState<string[]>(sections.map(s => s.title));
 
   const toggleSection = (title: string) => {
-    setOpenSections(prev => 
-      prev.includes(title) 
+    setOpenSections(prev =>
+      prev.includes(title)
         ? prev.filter(t => t !== title)
         : [...prev, title]
     );
   };
 
   return (
-    <div className="flex flex-col gap-4 w-[350px]">
+    <div className="flex flex-col gap-4 w-full xl:w-[350px]">
       {sections.map((section) => {
         const isOpen = openSections.includes(section.title);
 
         return (
           <div key={section.title} className="flex flex-col gap-2">
             {/* Header / Trigger */}
-            <button 
+            <button
               onClick={() => toggleSection(section.title)}
               className="bg-[#222222] text-white px-4 py-3 rounded-xl flex justify-between items-center shadow-sm w-full"
             >
               <span className="font-semibold text-sm">{section.title}</span>
-              <ChevronDown 
-                size={16} 
+              <ChevronDown
+                size={16}
                 className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
               />
             </button>
@@ -95,9 +95,8 @@ export function SidePanel({
                       return (
                         <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                           <div
-                            className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors border-l-4 ${
-                              isActive ? 'bg-[#222222] hover:bg-[#2a2a2a]' : 'bg-[#333333] hover:bg-[#444444]'
-                            } text-white`}
+                            className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors border-l-4 ${isActive ? 'bg-[#222222] hover:bg-[#2a2a2a]' : 'bg-[#333333] hover:bg-[#444444]'
+                              } text-white`}
                             style={{ borderLeftColor: borderColor }}
                           >
                             <span>{item}</span>
@@ -121,9 +120,8 @@ export function SidePanel({
                     return (
                       <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                         <div
-                          className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors ${
-                            isActive ? 'bg-[#222222] border-l-4 border-blue-500' : 'bg-[#333333] hover:bg-[#444444]'
-                          } text-white`}
+                          className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors ${isActive ? 'bg-[#222222] border-l-4 border-blue-500' : 'bg-[#333333] hover:bg-[#444444]'
+                            } text-white`}
                         >
                           <span>{item}</span>
                           {isActive && (
@@ -140,7 +138,7 @@ export function SidePanel({
                         </div>
                       </DraggableItem>
                     );
-                })}
+                  })}
               </div>
             )}
           </div>

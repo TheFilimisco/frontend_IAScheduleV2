@@ -24,10 +24,19 @@ export function ManagementSection({ title, addButton, children, minHeight = "120
 }
 
 /** Botón + circular reutilizable */
-export function PlusButton() {
-  return (
-    <button className="bg-white rounded-full w-10 h-10 flex items-center justify-center shadow-md hover:bg-gray-100 transition-colors">
-      <Plus size={20} className="text-black" />
-    </button>
-  );
-}
+import { forwardRef } from "react";
+
+export const PlusButton = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+  ({ className, ...props }, ref) => {
+    return (
+      <button 
+        ref={ref}
+        {...props}
+        className={`bg-white rounded-full w-10 h-10 flex items-center justify-center shadow-md hover:bg-gray-100 transition-colors ${className || ""}`}
+      >
+        <Plus size={20} className="text-black" />
+      </button>
+    );
+  }
+);
+PlusButton.displayName = "PlusButton";

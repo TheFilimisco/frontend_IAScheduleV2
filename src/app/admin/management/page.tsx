@@ -83,11 +83,11 @@ export default function AdminManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-[#dfdfdf] flex flex-col pb-24">
+    <div className="min-h-screen bg-[#dfdfdf] dark:bg-background flex flex-col pb-24 transition-colors duration-300">
       <Navbar role="admin" />
 
       <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
-        <main className="flex-1 flex flex-col items-center gap-6 px-10 pt-4 w-full">
+        <main className="flex-1 flex flex-col items-center gap-6 px-10  pt-24 lg:pt-4 pb-24 lg:pb-0 w-full">
 
           {/* ── Tasks ── */}
           <TasksSection

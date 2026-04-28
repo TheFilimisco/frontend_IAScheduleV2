@@ -12,15 +12,24 @@ export const metadata: Metadata = {
   description: "Schedule Management with AI",
 };
 
+import { ThemeProvider } from "@/components/ThemeProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${openSans.variable} antialiased`}>
+    <html lang="en" className={`${openSans.variable} antialiased`} suppressHydrationWarning>
       <body className={`${openSans.className} min-h-full flex flex-col`}>
-        {children}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

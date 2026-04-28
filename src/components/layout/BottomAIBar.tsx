@@ -12,7 +12,7 @@ interface BottomAIBarProps {
 
 export function BottomAIBar({ prompt, setPrompt, onSend }: BottomAIBarProps) {
   return (
-    <div className="fixed bottom-8 left-0 w-full flex justify-center px-4">
+    <div className="fixed bottom-24 md:bottom-8 left-0 w-full flex justify-center px-4 z-40">
       <DroppableArea id="ai-input-dropzone" className="w-full max-w-3xl">
         <div className="bg-white rounded-full shadow-lg border border-gray-200 w-full flex items-center px-4 py-2 relative">
           <Input 

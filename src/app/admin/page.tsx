@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDroppable, useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
+import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
 import { SidePanel } from "@/components/dashboard/SidePanel";
@@ -10,69 +9,11 @@ import { CreateTaskModal } from "@/components/modals/CreateTaskModal";
 import { ViewTaskModal } from "@/components/modals/ViewTaskModal";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 // Componente para celdas droppables individuales (intersecto Empleado-Hora)
-import { forwardRef } from "react";
+import { DroppableCell } from "@/components/dashboard/DroppableCell";
+import { DraggableTask } from "@/components/dashboard/DraggableTask";
+import { CalendarDropzone } from "@/components/dashboard/CalendarDropzone";
 
-const DroppableCell = forwardRef<HTMLDivElement, { id: string, children?: React.ReactNode }>(
-  ({ id, children, ...props }, ref) => {
-    const { setNodeRef, isOver } = useDroppable({ id });
 
-    // Combinar referencias (dnd-kit + Base UI)
-    const handleRef = (node: HTMLDivElement) => {
-      setNodeRef(node);
-      if (typeof ref === 'function') ref(node);
-      else if (ref) ref.current = node;
-    };
-
-    return (
-      <div
-        ref={handleRef}
-        {...props}
-        className={`flex-1 border-r border-gray-50 last:border-r-0 relative cursor-pointer transition-colors ${isOver ? 'bg-blue-100/50' : 'hover:bg-gray-100'}`}
-      >
-        {children}
-      </div>
-    );
-  }
-);
-DroppableCell.displayName = "DroppableCell";
-
-// Tarea del calendario que se puede arrastrar a otra celda
-function DraggableTask({ id, style: externalStyle, children }: { id: number; style?: React.CSSProperties; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `calendar-task-${id}`,
-    data: { type: "calendar-task", taskId: id },
-  });
-
-  const style: React.CSSProperties = {
-    ...externalStyle,
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.55 : 1,
-    zIndex: isDragging ? 100 : 10,
-    cursor: isDragging ? "grabbing" : "grab",
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className="absolute top-2 bottom-2"
-    >
-      {children}
-    </div>
-  );
-}
-
-// Contenedor general del calendario para dropear Departamentos/Empleados enteros
-function CalendarDropzone({ children }: { children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: "calendar-dropzone" });
-  return (
-    <div ref={setNodeRef} className={`flex-1 border border-gray-200 rounded-xl overflow-x-auto overflow-y-auto bg-white transition-colors ${isOver ? 'ring-2 ring-blue-400 bg-blue-50/10' : ''}`}>
-      {children}
-    </div>
-  );
-}
 
 export default function AdminDashboard() {
   const [prompt, setPrompt] = useState("");
@@ -156,6 +97,17 @@ export default function AdminDashboard() {
     setTimeout(() => setErrorMsg(""), 4000);
   };
 
+  // Función auxiliar para verificar si hay superposición de horarios
+  const checkOverlap = (emp: string, dateStr: string, startHour: number, duration: number, ignoreTaskId: number | null = null) => {
+    return tasksData.some(t =>
+      t.employee === emp &&
+      t.dateStr === dateStr &&
+      t.id !== ignoreTaskId &&
+      startHour < t.startHour + t.duration &&
+      startHour + duration > t.startHour
+    );
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -169,9 +121,6 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Filtrar tareas por la fecha seleccionada localmente para chequeos
-    const currentDayTasks = tasksData.filter(t => t.dateStr === currentDate.toDateString());
-
     // 2. Soltar en una celda horaria específica
     if (over.id.toString().startsWith("cell-")) {
       const [_, emp, hourStr] = over.id.toString().split("-");
@@ -180,21 +129,36 @@ export default function AdminDashboard() {
       // 2a. Mover tarea ya existente en el calendario
       if (active.data.current?.type === "calendar-task") {
         const taskId = active.data.current?.taskId as number;
-        setTasksData(prev =>
-          prev.map(t =>
-            t.id === taskId ? { ...t, employee: emp, startHour: hour } : t
-          )
-        );
+        const taskToMove = tasksData.find(t => t.id === taskId);
+
+        if (taskToMove) {
+          if (checkOverlap(emp, currentDate.toDateString(), hour, taskToMove.duration, taskId)) {
+            showError(`🚫 El horario de las ${hour}:00 ya está ocupado para ${emp}.`);
+            return;
+          }
+          setTasksData(prev =>
+            prev.map(t =>
+              t.id === taskId ? { ...t, employee: emp, startHour: hour } : t
+            )
+          );
+        }
         return;
       }
 
       // 2b. Asignar nueva tarea desde el panel lateral
       if (active.data.current?.type === "Tasks") {
         const taskName = active.data.current?.value;
+        const currentDayTasks = tasksData.filter(t => t.dateStr === currentDate.toDateString());
 
         // Validación: Tareas exclusivas por día
         if (currentDayTasks.some(t => t.title === taskName)) {
           showError(`🚫 La tarea "${taskName}" ya ha sido asignada a alguien más hoy. Las tareas son exclusivas y no se pueden compartir.`);
+          return;
+        }
+
+        // Validación: Superposición de horarios
+        if (checkOverlap(emp, currentDate.toDateString(), hour, 1)) {
+          showError(`🚫 El horario de las ${hour}:00 ya está ocupado para ${emp}.`);
           return;
         }
 
@@ -240,6 +204,12 @@ export default function AdminDashboard() {
     const currentDayTasks = tasksData.filter(t => t.dateStr === currentDate.toDateString());
     if (currentDayTasks.some(t => t.title === data.title)) {
       showError(`🚫 La tarea "${data.title}" ya existe en el calendario de hoy. Elige otro nombre u otra tarea.`);
+      return;
+    }
+
+    // Validación: Superposición de horarios
+    if (checkOverlap(emp, currentDate.toDateString(), hour, 1)) {
+      showError(`🚫 El horario de las ${hour}:00 ya está ocupado para ${emp}.`);
       return;
     }
 
@@ -292,14 +262,12 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#dfdfdf] flex flex-col relative">
+    <div className="min-h-screen bg-[#dfdfdf] dark:bg-background flex flex-col relative transition-colors duration-300">
       <Navbar role="admin" />
-
-
 
       {/* Custom Error Pop-up / Toast */}
       {errorMsg && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white border-l-4 border-red-400 text-gray-800 px-6 py-4 rounded-sm shadow-xl font-medium text-sm flex items-center justify-between gap-4 min-w-[350px] animate-in fade-in slide-in-from-top-4">
+        <div className="fixed top-24 md:top-20 left-1/2 -translate-x-1/2 z-50 bg-white border-l-4 border-red-400 text-gray-800 px-4 md:px-6 py-4 rounded-sm shadow-xl font-medium text-sm flex items-center justify-between gap-4 w-[90%] md:w-auto md:min-w-[350px] animate-in fade-in slide-in-from-top-4">
           <span>{errorMsg}</span>
           <button onClick={() => setErrorMsg("")} className="text-gray-400 hover:text-red-500 transition-colors shrink-0">
             <X size={16} />
@@ -308,23 +276,23 @@ export default function AdminDashboard() {
       )}
 
       <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
-        <main className="flex-1 flex gap-8 px-10 pt-4 pb-24 max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 flex flex-col xl:flex-row gap-8 px-4 md:px-10 pt-24 lg:pt-4 pb-32 lg:pb-24 max-w-[1600px] w-full mx-auto">
           {/* Lado Izquierdo: Calendario */}
           <div className="flex-1 min-w-0">
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 h-[650px] p-6 flex flex-col">
+            <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 h-[550px] lg:h-[650px] p-4 md:p-6 flex flex-col transition-colors duration-300">
 
               {/* Controles Superiores: Fecha y Departamento */}
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-4 md:mb-6 gap-4">
 
                 {/* Navegación de Fechas */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-center">
                   <button
                     onClick={handlePrevDay}
                     className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
                   >
                     <ChevronLeft size={24} />
                   </button>
-                  <h2 className="text-gray-800 text-xl font-bold min-w-[250px] text-center capitalize">
+                  <h2 className="text-gray-800 dark:text-gray-100 text-base md:text-xl font-bold min-w-0 md:min-w-[250px] text-center capitalize truncate px-2">
                     {formatDate(currentDate)}
                   </h2>
                   <button
@@ -337,7 +305,7 @@ export default function AdminDashboard() {
 
                 {/* Placa Decorativa del Departamento con Colores Dinámicos */}
                 <div
-                  className="px-6 py-2.5 rounded-lg font-bold shadow-md tracking-wide text-white transition-colors"
+                  className="px-6 py-2 rounded-lg font-bold shadow-md tracking-wide text-white transition-colors text-sm md:text-base w-full md:w-auto text-center"
                   style={{ backgroundColor: deptColorMap[currentDepartment] ?? "#1f2937" }}
                 >
                   {currentDepartment}
@@ -345,26 +313,26 @@ export default function AdminDashboard() {
 
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm text-gray-500 border border-gray-100 flex justify-between items-center">
+              <div className="bg-gray-50 dark:bg-[#222222] rounded-lg p-3 mb-4 text-sm text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-gray-700 flex justify-between items-center transition-colors">
                 <div>
-                  <span className="font-semibold text-black mr-2">Vista Dinámica</span>
+                  <span className="font-semibold text-black dark:text-white mr-2">Vista Dinámica</span>
                   Haz clic en el panel derecho sobre un departamento para filtrar, o arrastra tareas al horario.
                 </div>
               </div>
 
               {/* Grid del Timeline */}
               <CalendarDropzone>
-                <div className="min-w-[700px] relative">
+                <div className="min-w-[700px] relative ">
                   {/* Header de Horas Dinámico con Color */}
                   <div
-                    className="flex border-b border-gray-200 sticky top-0 z-20 transition-colors backdrop-blur-md"
+                    className="flex border-b  border-gray-200 sticky top-0 z-30 transition-colors backdrop-blur-md"
                     style={{ backgroundColor: (deptColorMap[currentDepartment] ?? "#6b7280") + "14" }}
                   >
-                    <div className="w-28 shrink-0 p-3 border-r border-gray-200 font-bold text-gray-700 text-sm flex items-center sticky left-0 z-30 bg-inherit">
+                    <div className="w-28 shrink-0 p-3 border-r border-gray-200 font-bold text-gray-700 text-sm flex items-center sticky left-0 z-40 bg-white dark:bg-[#222222] dark:text-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                       Employees
                     </div>
                     {hours.map(h => (
-                      <div key={h} className="flex-1 min-w-[60px] text-center text-xs font-bold text-gray-500 py-3 border-r border-gray-200 last:border-r-0">
+                      <div key={h} className="flex-1 min-w-[60px] bg-white dark:bg-[#222222] text-center text-xs font-bold text-gray-500 dark:text-gray-300 py-3 border-r border-gray-200 last:border-r-0">
                         {h}:00
                       </div>
                     ))}
@@ -372,13 +340,13 @@ export default function AdminDashboard() {
 
                   {/* Filas de Empleados */}
                   {employeesList.length > 0 ? employeesList.map(emp => (
-                    <div key={emp} className="flex border-b border-gray-100 relative h-20 group hover:bg-gray-50 transition-colors">
+                    <div key={emp} className="flex border-b border-gray-100 dark:border-gray-800 relative h-20 group hover:bg-gray-50 dark:hover:bg-[#2a2a2a] bg-white dark:bg-[#222222] transition-colors">
                       {/* Nombre del empleado con botón X */}
-                      <div className="w-28 shrink-0 p-3 border-r border-gray-200 flex justify-between items-center text-sm font-semibold text-gray-800 bg-white group-hover:bg-gray-50 sticky left-0 z-10">
+                      <div className="w-28 shrink-0 p-3 border-r border-gray-200 dark:border-gray-800 flex justify-between items-center text-sm font-semibold text-gray-800 dark:text-gray-200 bg-white dark:bg-[#1a1a1a] group-hover:bg-gray-50 dark:group-hover:bg-[#2a2a2a] sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors">
                         <span>{emp}</span>
                         <button
                           onClick={() => setEmployeesList(prev => prev.filter(e => e !== emp))}
-                          className="text-gray-300 hover:text-red-500 transition-colors bg-gray-100 hover:bg-red-50 rounded-full p-1"
+                          className="text-gray-300  dark:text-gray-500  hover:text-red-500 hover:bg-red-50 dark:hover:text-red-500 hover:dark:bg-red-50 transition-colors rounded-full p-1"
                         >
                           <X size={14} />
                         </button>
@@ -409,10 +377,30 @@ export default function AdminDashboard() {
                               key={task.id}
                               id={task.id}
                               style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                              onResizeComplete={(deltaHours) => {
+                                const newDuration = Math.max(1, task.duration + deltaHours);
+                                if (newDuration !== task.duration) {
+                                  if (checkOverlap(task.employee, currentDate.toDateString(), task.startHour, newDuration, task.id)) {
+                                    showError(`🚫 No se puede extender la tarea. Choca con otra tarea de ${task.employee}.`);
+                                  } else {
+                                    setTasksData(prev => prev.map(t => t.id === task.id ? { ...t, duration: newDuration } : t));
+                                  }
+                                }
+                              }}
                             >
-                              <ViewTaskModal task={task}>
+                              <ViewTaskModal
+                                task={task}
+                                onUpdate={(updatedTask) => {
+                                  if (checkOverlap(updatedTask.employee, currentDate.toDateString(), updatedTask.startHour, updatedTask.duration, updatedTask.id)) {
+                                    showError(`🚫 No se puede extender la tarea. Choca con otra tarea de ${updatedTask.employee}.`);
+                                    return false;
+                                  }
+                                  setTasksData(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+                                  return true;
+                                }}
+                              >
                                 <div
-                                  className="rounded-lg text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap w-full h-full group/task hover:brightness-110 transition-all"
+                                  className="rounded-lg text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap w-full h-full group/task hover:brightness-110 transition-all "
                                   style={{ backgroundColor: getEmployeeDeptColor(task.employee) }}
                                 >
                                   <span className="font-semibold text-xs tracking-wide truncate px-1 flex-1">{task.title}</span>
@@ -444,7 +432,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Lado Derecho: Side Panel */}
-          <div className="w-80 shrink-0">
+          <div className="w-full xl:w-80 shrink-0">
             <SidePanel
               sections={adminSections}
               onItemClick={handleSidePanelClick}
