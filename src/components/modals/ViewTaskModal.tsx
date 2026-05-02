@@ -29,12 +29,12 @@ export function ViewTaskModal({ children, task, onUpdate }: { children: React.Re
             {task.title}
           </DialogTitle>
         </DialogHeader>
-        
+
         <div className="flex flex-col gap-4 mt-2">
-          
+
           {/* Tarjeta de Información Rápida */}
           <div className="bg-gray-50 dark:bg-[#222222] p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex flex-col gap-3 transition-colors">
-            
+
             <div className="flex items-center gap-3 text-sm">
               <div className="bg-white dark:bg-[#1a1a1a] p-1.5 rounded-md shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
                 <User size={16} />
@@ -69,7 +69,7 @@ export function ViewTaskModal({ children, task, onUpdate }: { children: React.Re
                       className="bg-white dark:bg-[#222222] border border-gray-300 dark:border-gray-600 text-xs font-bold rounded-md px-2 py-1 text-gray-800 dark:text-gray-100 outline-none cursor-pointer"
                     >
                       {[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                         <option key={`start-${h}`} value={h}>{h}:00</option>
+                        <option key={`start-${h}`} value={h}>{h}:00</option>
                       ))}
                     </select>
                     <span className="text-gray-400">to</span>
@@ -79,7 +79,7 @@ export function ViewTaskModal({ children, task, onUpdate }: { children: React.Re
                       className="bg-white dark:bg-[#222222] border border-gray-300 dark:border-gray-600 text-xs font-bold rounded-md px-2 py-1 text-gray-800 dark:text-gray-100 outline-none cursor-pointer"
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map(d => (
-                         <option key={`dur-${d}`} value={d}>{editStartHour + d}:00 ({d}h)</option>
+                        <option key={`dur-${d}`} value={d}>{editStartHour + d}:00 ({d}h)</option>
                       ))}
                     </select>
                   </div>
@@ -90,7 +90,7 @@ export function ViewTaskModal({ children, task, onUpdate }: { children: React.Re
             </div>
 
           </div>
-          
+
           {/* Descripción de la Tarea */}
           <div className="flex flex-col gap-2 mt-2">
             <div className="flex items-center justify-between">
@@ -111,7 +111,7 @@ export function ViewTaskModal({ children, task, onUpdate }: { children: React.Re
                 </button>
               )}
             </div>
-            
+
             {isEditing ? (
               <textarea
                 value={desc}

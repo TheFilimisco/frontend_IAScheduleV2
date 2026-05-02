@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function CreateEmployeeModal({ children, initialData, onSave }: { children: React.ReactNode; initialData?: any; onSave?: (data: any) => void }) {
   const isEdit = !!initialData;
@@ -40,12 +41,36 @@ export function CreateEmployeeModal({ children, initialData, onSave }: { childre
           </div>
           <Input type="email" placeholder="Email" className="bg-[#333333] border-none text-white placeholder-gray-400" required
             value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
-          <Input placeholder="Profession" className="bg-[#333333] border-none text-white placeholder-gray-400"
-            value={formData.profession} onChange={e => setFormData({ ...formData, profession: e.target.value })} />
-          <Input placeholder="Schedule (e.g. 9am-5pm)" className="bg-[#333333] border-none text-white placeholder-gray-400"
-            value={formData.schedule} onChange={e => setFormData({ ...formData, schedule: e.target.value })} />
+          <div className="flex flex-col gap-2">
+            <Select value={formData.profession} onValueChange={(val) => setFormData({ ...formData, profession: val })}>
+              <SelectTrigger className="bg-[#333333] border-none text-white w-full">
+                <SelectValue placeholder="Profession" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#333333] text-white border-gray-700" alignItemWithTrigger={false} side="bottom">
+                <SelectItem value="Developer">Developer</SelectItem>
+                <SelectItem value="Designer">Designer</SelectItem>
+                <SelectItem value="Marketing">Marketing</SelectItem>
+                <SelectItem value="Manager">Manager</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Select value={formData.schedule} onValueChange={(val) => setFormData({ ...formData, schedule: val })}>
+              <SelectTrigger className="bg-[#333333] border-none text-white w-full">
+                <SelectValue placeholder="Schedule (e.g. 9am-5pm)" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#333333] text-white border-gray-700" alignItemWithTrigger={false} side="bottom">
+                <SelectItem value="9am-5pm">9am - 5pm</SelectItem>
+                <SelectItem value="8am-4pm">8am - 4pm</SelectItem>
+                <SelectItem value="10am-6pm">10am - 6pm</SelectItem>
+                <SelectItem value="Night Shift">Night Shift</SelectItem>
+                <SelectItem value="Flexible">Flexible</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Button type="submit" className="bg-white text-black hover:bg-gray-200 mt-2">
+          <Button type="submit" className="py-5 bg-white text-black hover:bg-gray-200 mt-2">
             {isEdit ? "Update" : "Create"}
           </Button>
         </form>

@@ -16,7 +16,7 @@ export function CreateDepartmentModal({ children, initialData, onSave }: { child
     const data = { name, description };
     if (onSave) onSave(data);
     setOpen(false); // Cierra el modal
-    
+
     // Resetea si no es edición
     if (!isEdit) {
       setName("");
@@ -32,18 +32,18 @@ export function CreateDepartmentModal({ children, initialData, onSave }: { child
           <DialogTitle>{isEdit ? "Update Departament" : "Create New Departament"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
-          <Input 
-            placeholder="Name" 
-            value={name} onChange={(e) => setName(e.target.value)} 
+          <Input
+            placeholder="Name"
+            value={name} onChange={(e) => setName(e.target.value)}
             className="bg-[#333333] border-none focus-visible:ring-gray-500 text-white placeholder-gray-400"
             required
           />
-          <Input 
-            placeholder="Description" 
-            value={description} onChange={(e) => setDescription(e.target.value)} 
+          <Input
+            placeholder="Description"
+            value={description} onChange={(e) => setDescription(e.target.value)}
             className="bg-[#333333] border-none focus-visible:ring-gray-500 text-white placeholder-gray-400"
           />
-          <Button type="submit" className="bg-white text-black hover:bg-gray-200 mt-2">
+          <Button type="submit" className="py-5 bg-white text-black hover:bg-gray-200 mt-2">
             {isEdit ? "Update" : "Create"}
           </Button>
         </form>

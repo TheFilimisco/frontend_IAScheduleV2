@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useDashboardStore } from "@/store/dashboardStore";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
@@ -23,13 +24,23 @@ const TODAY_STR = new Date().toDateString();
 export default function AdminManagement() {
   const [prompt, setPrompt] = useState("");
 
-  const [employees, setEmployees] = useState(["Juan", "Carlos", "Gabriel"]);
-  const [departments, setDepartments] = useState(["Design", "Marketing", "Call Center"]);
-  const [tasks, setTasks] = useState<TaskItem[]>([
-    { title: "Design Task 1", dateStr: TODAY_STR },
-    { title: "Marketing Campaign", dateStr: TODAY_STR },
-    { title: "Support Tickets", dateStr: TODAY_STR },
-  ]);
+  const {
+    departments,
+    addDepartment: storeAddDepartment,
+    updateDepartment: storeUpdateDepartment,
+    deleteDepartment: storeDeleteDepartment,
+    employeesList: employees, // In real app, employeesByDept should probably be flattened
+    addEmployee: storeAddEmployee,
+    updateEmployee: storeUpdateEmployee,
+    deleteEmployee: storeDeleteEmployee,
+    tasksData: tasks,
+    addTask: storeAddTask,
+    updateTask: storeUpdateTask,
+    deleteTask: storeDeleteTask,
+    sendAIPrompt,
+    fetchData
+  } = useDashboardStore();
+
   const [selectedDay, setSelectedDay] = useState(TODAY_STR);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -42,44 +53,48 @@ export default function AdminManagement() {
     }
   };
 
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   // --- Employees CRUD ---
   const createEmployee = (d: any) => {
     const n = d.firstName || d.name;
-    if (n) setEmployees(p => [...p, n]);
+    if (n) storeAddEmployee(d);
   };
   const updateEmployee = (old: string, d: any) => {
     const n = d.firstName || d.name;
-    if (n) setEmployees(p => p.map(i => i === old ? n : i));
+    if (n) storeUpdateEmployee(old, d);
   };
   const deleteEmployee = (e: React.MouseEvent, item: string) => {
     e.stopPropagation();
-    setEmployees(p => p.filter(i => i !== item));
+    storeDeleteEmployee(item);
   };
 
   // --- Departments CRUD ---
   const createDepartment = (d: any) => {
-    if (d.name) setDepartments(p => [...p, d.name]);
+    if (d.name) storeAddDepartment(d);
   };
   const updateDepartment = (old: string, d: any) => {
-    if (d.name) setDepartments(p => p.map(i => i === old ? d.name : i));
+    if (d.name) storeUpdateDepartment(old, d.name);
   };
   const deleteDepartment = (e: React.MouseEvent, item: string) => {
     e.stopPropagation();
-    setDepartments(p => p.filter(i => i !== item));
+    storeDeleteDepartment(item);
   };
 
   // --- Tasks CRUD ---
   const createTask = (d: any) => {
-    if (d.title) setTasks(p => [...p, { title: d.title, dateStr: selectedDay }]);
+    if (d.title) storeAddTask({ id: Date.now(), title: d.title, dateStr: selectedDay, employee: "", description: "", startHour: 9, duration: 1, color: "bg-blue-500" });
   };
   const updateTask = (old: string, d: any) => {
-    if (d.title) setTasks(p => p.map(t =>
-      t.title === old && t.dateStr === selectedDay ? { ...t, title: d.title } : t
-    ));
+    const task = tasks.find(t => t.title === old && t.dateStr === selectedDay);
+    if (d.title && task) storeUpdateTask(task.id, { title: d.title });
   };
   const deleteTask = (e: React.MouseEvent, title: string) => {
     e.stopPropagation();
-    setTasks(p => p.filter(t => !(t.title === title && t.dateStr === selectedDay)));
+    const task = tasks.find(t => t.title === title && t.dateStr === selectedDay);
+    if (task) storeDeleteTask(task.id);
   };
 
   return (
@@ -141,7 +156,7 @@ export default function AdminManagement() {
 
         </main>
 
-        <BottomAIBar prompt={prompt} setPrompt={setPrompt} onSend={() => { if (prompt.trim()) { console.log("AI:", prompt); setPrompt(""); } }} />
+        <BottomAIBar prompt={prompt} setPrompt={setPrompt} onSend={() => { if (prompt.trim()) { sendAIPrompt(prompt); setPrompt(""); } }} />
       </DndContext>
     </div>
   );
