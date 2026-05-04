@@ -4,8 +4,17 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Clock, CalendarDays, User, AlignLeft, Edit2, Check } from "lucide-react";
 
-export function ViewTaskModal({ children, task, onUpdate }: { children: React.ReactNode; task: any; onUpdate?: (updatedTask: any) => boolean | void }) {
-  const [open, setOpen] = useState(false);
+export function ViewTaskModal({
+  task,
+  open,
+  onOpenChange,
+  onUpdate,
+}: {
+  task: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onUpdate?: (updatedTask: any) => boolean | void;
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [desc, setDesc] = useState(task.description || "");
   const [editDuration, setEditDuration] = useState(task.duration || 1);
@@ -14,14 +23,13 @@ export function ViewTaskModal({ children, task, onUpdate }: { children: React.Re
   const handleSave = () => {
     if (onUpdate) {
       const success = onUpdate({ ...task, description: desc, duration: editDuration, startHour: editStartHour });
-      if (success === false) return; // Validation failed, do not close edit mode
+      if (success === false) return;
     }
     setIsEditing(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={children as React.ReactElement} />
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-white dark:bg-[#1a1a1a] text-gray-800 dark:text-gray-100 border-gray-200 dark:border-gray-800 shadow-2xl sm:max-w-[425px] rounded-xl transition-colors">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">

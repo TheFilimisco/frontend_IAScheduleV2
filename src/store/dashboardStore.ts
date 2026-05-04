@@ -1,5 +1,30 @@
 import { create } from 'zustand';
 
+// ─── Entity types (mirror backend toJSON output) ─────────────────────────────
+export type Profession = {
+  id: string;
+  name: string;
+  departmentId?: string;
+  isActive: boolean;
+};
+
+export type Department = {
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+};
+
+export type Employee = {
+  id: string;
+  code: string;          // Unique employee code, e.g. EMP-JODO-847
+  firstName: string;
+  lastName: string;
+  departmentId?: string;
+  role?: string;
+  status?: string;
+};
+
 export type Task = {
   id: number | string;
   employee: string;
@@ -9,6 +34,7 @@ export type Task = {
   duration: number;
   color: string;
   dateStr: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
 };
 
 export type HistoryLog = {
@@ -24,9 +50,12 @@ interface DashboardState {
   employeesList: string[]; // Empleados visibles en el calendario
   adminSections: any[];
   employeesByDept: Record<string, string[]>;
-  departments: string[];
-  professions: string[];
+  departments: string[];          // legacy: names only (used by calendar)
+  professions: string[];           // legacy: names only
   schedules: string[];
+  professionsList: Profession[];   // full objects → feeds dropdowns
+  departmentsList: Department[];   // full objects → feeds dropdowns
+  employeesFullList: Employee[];   // full objects → feeds assignee dropdowns
   history: HistoryLog[];
   isLoading: boolean;
   error: string | null;
@@ -85,6 +114,29 @@ const MOCK_PROFESSIONS = ["Developer", "Designer", "Marketing", "Manager", "Othe
 // Claves cortas que coinciden con el enum del backend (Employee.schedule)
 const MOCK_SCHEDULES = ['morning', 'early', 'late', 'night', 'flexible'];
 
+const MOCK_PROFESSIONS_LIST: Profession[] = [
+  { id: 'mock-prof-1', name: 'Developer',  isActive: true },
+  { id: 'mock-prof-2', name: 'Designer',   isActive: true },
+  { id: 'mock-prof-3', name: 'Marketing',  isActive: true },
+  { id: 'mock-prof-4', name: 'Manager',    isActive: true },
+  { id: 'mock-prof-5', name: 'Other',      isActive: true },
+];
+
+const MOCK_DEPARTMENTS_LIST: Department[] = [
+  { id: 'mock-dept-1', name: 'Design',      color: '#3b82f6' },
+  { id: 'mock-dept-2', name: 'Marketing',   color: '#22c55e' },
+  { id: 'mock-dept-3', name: 'Call Center', color: '#f97316' },
+];
+
+const MOCK_EMPLOYEES_FULL: Employee[] = [
+  { id: 'mock-emp-1', code: 'EMP-JUCA-001', firstName: 'Juan',    lastName: 'Carlos',  departmentId: 'mock-dept-1', role: 'employee', status: 'active' },
+  { id: 'mock-emp-2', code: 'EMP-CAMA-002', firstName: 'Carlos',  lastName: 'Martínez',departmentId: 'mock-dept-1', role: 'supervisor', status: 'active' },
+  { id: 'mock-emp-3', code: 'EMP-GARO-003', firstName: 'Gabriel', lastName: 'Romero',  departmentId: 'mock-dept-2', role: 'employee', status: 'active' },
+  { id: 'mock-emp-4', code: 'EMP-ANLO-004', firstName: 'Ana',     lastName: 'López',   departmentId: 'mock-dept-2', role: 'employee', status: 'active' },
+  { id: 'mock-emp-5', code: 'EMP-LUGA-005', firstName: 'Luis',    lastName: 'García',  departmentId: 'mock-dept-3', role: 'employee', status: 'active' },
+  { id: 'mock-emp-6', code: 'EMP-MATO-006', firstName: 'María',   lastName: 'Torres',  departmentId: 'mock-dept-3', role: 'manager',  status: 'active' },
+];
+
 // Mapa de labels para mostrar en la UI (el backend nunca toca esto)
 export const SCHEDULE_LABELS: Record<string, string> = {
   morning:  '9am - 5pm',
@@ -110,6 +162,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   departments: ["Design", "Marketing", "Call Center"],
   professions: [],
   schedules: [],
+  professionsList: [],
+  departmentsList: [],
+  employeesFullList: [],
   history: [],
   isLoading: true,
   error: null,
@@ -130,12 +185,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       if (process.env.NEXT_PUBLIC_USE_API === "true") {
-        const [tasksRes, sectionsRes, employeesByDeptRes, profRes, schedRes] = await Promise.all([
+        const [tasksRes, sectionsRes, employeesByDeptRes, profRes, schedRes, profListRes, deptListRes, empListRes] = await Promise.all([
           fetch('/api/tasks').then(res => res.ok ? res.json() : MOCK_TASKS),
           fetch('/api/sections').then(res => res.ok ? res.json() : MOCK_ADMIN_SECTIONS),
           fetch('/api/employees-by-dept').then(res => res.ok ? res.json() : MOCK_EMPLOYEES_BY_DEPT),
           fetch('/api/professions').then(res => res.ok ? res.json() : MOCK_PROFESSIONS),
-          fetch('/api/schedules').then(res => res.ok ? res.json() : MOCK_SCHEDULES)
+          fetch('/api/schedules').then(res => res.ok ? res.json() : MOCK_SCHEDULES),
+          fetch('/api/professions?full=1').then(res => res.ok ? res.json() : MOCK_PROFESSIONS_LIST),
+          fetch('/api/departments').then(res => res.ok ? res.json() : MOCK_DEPARTMENTS_LIST),
+          fetch('/api/employees').then(res => res.ok ? res.json() : MOCK_EMPLOYEES_FULL),
         ]);
         
         set({ 
@@ -144,6 +202,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           employeesByDept: employeesByDeptRes || MOCK_EMPLOYEES_BY_DEPT,
           professions: Array.isArray(profRes) ? profRes : MOCK_PROFESSIONS,
           schedules: Array.isArray(schedRes) ? schedRes : MOCK_SCHEDULES,
+          professionsList: Array.isArray(profListRes) ? profListRes : MOCK_PROFESSIONS_LIST,
+          departmentsList: Array.isArray(deptListRes) ? deptListRes : MOCK_DEPARTMENTS_LIST,
+          employeesFullList: Array.isArray(empListRes) ? empListRes : MOCK_EMPLOYEES_FULL,
           employeesList: (employeesByDeptRes && employeesByDeptRes["Design"]) || MOCK_EMPLOYEES_BY_DEPT["Design"] || [],
           isLoading: false 
         });
@@ -155,6 +216,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           employeesByDept: MOCK_EMPLOYEES_BY_DEPT,
           professions: MOCK_PROFESSIONS,
           schedules: MOCK_SCHEDULES,
+          professionsList: MOCK_PROFESSIONS_LIST,
+          departmentsList: MOCK_DEPARTMENTS_LIST,
+          employeesFullList: MOCK_EMPLOYEES_FULL,
           employeesList: MOCK_EMPLOYEES_BY_DEPT["Design"] || [],
           isLoading: false 
         });
@@ -168,6 +232,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         employeesByDept: MOCK_EMPLOYEES_BY_DEPT,
         professions: MOCK_PROFESSIONS,
         schedules: MOCK_SCHEDULES,
+        professionsList: MOCK_PROFESSIONS_LIST,
+        departmentsList: MOCK_DEPARTMENTS_LIST,
+        employeesFullList: MOCK_EMPLOYEES_FULL,
         employeesList: MOCK_EMPLOYEES_BY_DEPT["Design"] || [],
         isLoading: false,
         error: error.message

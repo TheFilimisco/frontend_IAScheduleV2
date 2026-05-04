@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDashboardStore } from "@/store/dashboardStore";
+import type { Task } from "@/store/dashboardStore";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
+import type { AIMention } from "@/components/layout/BottomAIBar";
 import { SidePanel } from "@/components/dashboard/SidePanel";
 import { CreateTaskModal } from "@/components/modals/CreateTaskModal";
 import { ViewTaskModal } from "@/components/modals/ViewTaskModal";
@@ -17,13 +19,18 @@ import { CalendarDropzone } from "@/components/dashboard/CalendarDropzone";
 
 
 export default function AdminDashboard() {
-  const [prompt, setPrompt] = useState("");
+  // Estado del AI Bar (chips de menciones + texto libre)
+  const [aiMentions, setAiMentions] = useState<AIMention[]>([]);
+  const [aiText, setAiText] = useState("");
 
   // Estado de Fecha
   const [currentDate, setCurrentDate] = useState(new Date());
   
   // Estado de Vista del Calendario
-  const [calendarView, setCalendarView] = useState("1_day");
+  const [calendarView, setCalendarView] = useState("hours");
+
+  // Tarea seleccionada para ver/editar en el modal
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
 
   // Estado de Departamento Actual
   const [currentDepartment, setCurrentDepartment] = useState("Design");
@@ -33,6 +40,8 @@ export default function AdminDashboard() {
     employeesList,
     adminSections,
     employeesByDept,
+    departmentsList,
+    employeesFullList,
     isLoading,
     fetchData,
     setTasksData,
@@ -165,17 +174,51 @@ export default function AdminDashboard() {
 
     // 1. Soltar en la barra de IA
     if (over.id === "ai-input-dropzone") {
-      const droppedValue = active.data.current?.value;
-      if (droppedValue) {
-        setPrompt((prev) => (prev ? `${prev} @${droppedValue} ` : `@${droppedValue} `));
+      const dragType = active.data.current?.type as string;
+      const dragValue = active.data.current?.value as string;
+      if (!dragValue) return;
+
+      let mention: AIMention;
+
+      if (dragType === "Employees") {
+        // Look up the real code from employeesFullList (match by firstName or full name)
+        const empObj = employeesFullList.find(
+          (e) => e.firstName === dragValue || `${e.firstName} ${e.lastName}` === dragValue
+        );
+        mention = {
+          type: "employee",
+          display: dragValue,
+          payload: empObj?.code ?? dragValue,
+        };
+      } else if (dragType === "Tasks") {
+        // Find the task in tasksData to get its id
+        const taskObj = tasksData.find((t) => t.title === dragValue);
+        mention = {
+          type: "task",
+          display: dragValue,
+          payload: taskObj ? `task:${taskObj.id}:${dragValue}` : dragValue,
+        };
+      } else {
+        // Department or unknown
+        mention = { type: "department", display: dragValue, payload: dragValue };
       }
+
+      setAiMentions((prev) => [...prev, mention]);
       return;
     }
 
     // 2. Soltar en una celda horaria específica
     if (over.id.toString().startsWith("cell-")) {
-      const [_, emp, hourStr] = over.id.toString().split("-");
-      const hour = parseInt(hourStr, 10);
+      // Safe parsing: cell id = "cell-{empName}-{hourValue}"
+      // empName may contain dashes so we use lastIndexOf
+      const cellId = over.id.toString();
+      const lastDash = cellId.lastIndexOf("-");
+      const emp = cellId.slice(5, lastDash);          // skip "cell-" prefix
+      const hourStr = cellId.slice(lastDash + 1);
+      const hour = parseFloat(hourStr);               // preserves 8.25, 8.5, 8.75
+
+      // Duration per slot: 0.25h (15 min) in minutes view, 1h otherwise
+      const slotDuration = calendarView === "minutes" ? 0.25 : 1;
 
       // 2a. Mover tarea ya existente en el calendario
       if (active.data.current?.type === "calendar-task") {
@@ -184,7 +227,10 @@ export default function AdminDashboard() {
 
         if (taskToMove) {
           if (checkOverlap(emp, currentDate.toDateString(), hour, taskToMove.duration, taskId)) {
-            showError(`🚫 El horario de las ${hour}:00 ya está ocupado para ${emp}.`);
+            const label = calendarView === "minutes"
+              ? `${Math.floor(hour)}:${String(Math.round((hour % 1) * 60)).padStart(2, "0")}`
+              : `${hour}:00`;
+            showError(`🚫 El horario de las ${label} ya está ocupado para ${emp}.`);
             return;
           }
           updateTask(taskId, { employee: emp, startHour: hour });
@@ -199,18 +245,20 @@ export default function AdminDashboard() {
 
         // Validación: Tareas exclusivas por día
         if (currentDayTasks.some(t => t.title === taskName)) {
-          showError(`🚫 La tarea "${taskName}" ya ha sido asignada a alguien más hoy. Las tareas son exclusivas y no se pueden compartir.`);
+          showError(`🚫 La tarea "${taskName}" ya ha sido asignada a alguien más hoy.`);
           return;
         }
 
         // Validación: Superposición de horarios
-        if (checkOverlap(emp, currentDate.toDateString(), hour, 1)) {
-          showError(`🚫 El horario de las ${hour}:00 ya está ocupado para ${emp}.`);
+        if (checkOverlap(emp, currentDate.toDateString(), hour, slotDuration)) {
+          const label = calendarView === "minutes"
+            ? `${Math.floor(hour)}:${String(Math.round((hour % 1) * 60)).padStart(2, "0")}`
+            : `${hour}:00`;
+          showError(`🚫 El horario de las ${label} ya está ocupado para ${emp}.`);
           return;
         }
 
-        addTask({ id: Date.now(), employee: emp, title: taskName, description: "", startHour: hour, duration: 1, color: "bg-yellow-600", dateStr: currentDate.toDateString() });
-        console.log(`Assigned task ${taskName} to ${emp} at ${hour}:00 on ${currentDate.toDateString()}`);
+        addTask({ id: Date.now(), employee: emp, title: taskName, description: "", startHour: hour, duration: slotDuration, color: "bg-yellow-600", dateStr: currentDate.toDateString() });
       }
       return;
     }
@@ -261,9 +309,15 @@ export default function AdminDashboard() {
   };
 
   const handleSendPrompt = () => {
-    if (!prompt.trim()) return;
-    sendAIPrompt(prompt);
-    setPrompt("");
+    if (!aiText.trim() && aiMentions.length === 0) return;
+    // Build payload: mention payloads first, then the free text
+    const parts = [
+      ...aiMentions.map((m) => `@${m.payload}`),
+      aiText.trim(),
+    ].filter(Boolean);
+    sendAIPrompt(parts.join(" "));
+    setAiMentions([]);
+    setAiText("");
   };
 
   const handleSidePanelClick = (type: string, value: string) => {
@@ -302,6 +356,34 @@ export default function AdminDashboard() {
   }, [calendarView, currentDate, tasksData]);
 
   const tasksForCurrentDate = tasksForView; // Alias for backward compatibility in some places
+
+  // Build tasksByDept: maps department NAME → task titles that belong to it.
+  // Tasks whose employee belongs to a dept are grouped under that dept.
+  // (When real API is connected, use task.departmentId instead)
+  const tasksByDept = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    tasksData.forEach((task) => {
+      const dept = Object.keys(employeesByDept).find((k) =>
+        employeesByDept[k].includes(task.employee)
+      );
+      if (dept) {
+        if (!map[dept]) map[dept] = [];
+        if (!map[dept].includes(task.title)) map[dept].push(task.title);
+      }
+    });
+    return map;
+  }, [tasksData, employeesByDept]);
+
+  // Build taskMeta: maps task title → { priority } for the SidePanel
+  const taskMeta = useMemo(() => {
+    const map: Record<string, { priority?: 'low' | 'medium' | 'high' | 'urgent' }> = {};
+    tasksData.forEach((task) => {
+      if (task.title && task.priority) {
+        map[task.title] = { priority: task.priority };
+      }
+    });
+    return map;
+  }, [tasksData]);
 
   // Determinar elementos activos para mostrar X en el panel lateral
   const activeItems = [
@@ -353,10 +435,9 @@ export default function AdminDashboard() {
                     value={calendarView}
                     onChange={(e) => setCalendarView(e.target.value)}
                   >
-                    <option value="1_day">1 Día</option>
-                    <option value="7_days">7 Días</option>
                     <option value="hours">Horas</option>
                     <option value="minutes">Minutos</option>
+                    <option value="7_days">7 Días</option>
                   </select>
 
                   <div className="flex items-center gap-1 bg-white dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 shadow-sm">
@@ -452,18 +533,19 @@ export default function AdminDashboard() {
                             onSave={(data) => {
                               const dateToUse = calendarView === "7_days" ? (slot.value as string) : currentDate.toDateString();
                               const hourToUse = calendarView === "7_days" ? 9 : (slot.value as number);
-                              
+                              const slotDuration = calendarView === "minutes" ? 0.25 : 1;
+
                               if (!data.title) return;
                               const existingTasks = tasksData.filter(t => t.dateStr === dateToUse);
                               if (existingTasks.some(t => t.title === data.title)) {
                                 showError(`🚫 La tarea "${data.title}" ya existe en el calendario de ese día.`);
                                 return;
                               }
-                              if (checkOverlap(emp, dateToUse, hourToUse, 1)) {
+                              if (checkOverlap(emp, dateToUse, hourToUse, slotDuration)) {
                                 showError(`🚫 El horario ya está ocupado para ${emp}.`);
                                 return;
                               }
-                              addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description, startHour: hourToUse, duration: 1, color: "bg-teal-500", dateStr: dateToUse });
+                              addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description, startHour: hourToUse, duration: slotDuration, color: "bg-teal-500", dateStr: dateToUse });
                             }}
                           >
                             <DroppableCell id={`cell-${emp}-${slot.value}`}>
@@ -482,11 +564,21 @@ export default function AdminDashboard() {
                             leftPercent = (dayIdx / timeSlots.length) * 100;
                             widthPercent = (1 / timeSlots.length) * 100;
                           } else {
+                            // For hours/minutes views: find the exact slot matching task.startHour
                             const startIdx = timeSlots.findIndex(s => s.value === task.startHour);
-                            if (startIdx === -1) return null;
-                            leftPercent = (startIdx / timeSlots.length) * 100;
-                            const slotScale = calendarView === "minutes" ? 4 : 1;
-                            widthPercent = (task.duration * slotScale / timeSlots.length) * 100;
+                            if (startIdx !== -1) {
+                              // Found exact slot match
+                              leftPercent = (startIdx / timeSlots.length) * 100;
+                            } else {
+                              // Fallback: place by ratio (handles tasks created in a different view)
+                              const minSlot = timeSlots[0].value as number;
+                              const maxSlot = (timeSlots[timeSlots.length - 1].value as number) + (calendarView === "minutes" ? 0.25 : 1);
+                              const range = maxSlot - minSlot;
+                              leftPercent = ((task.startHour - minSlot) / range) * 100;
+                            }
+                            // Width: each hour = 1 slot in "hours" view, 4 slots in "minutes" view
+                            const slotsPerHour = calendarView === "minutes" ? 4 : 1;
+                            widthPercent = (task.duration * slotsPerHour / timeSlots.length) * 100;
                           }
 
                           return (
@@ -494,9 +586,13 @@ export default function AdminDashboard() {
                               key={task.id}
                               id={task.id}
                               style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                              onClickTask={() => setViewingTask(task)}
+                              snapHours={calendarView === "minutes" ? 0.25 : 1}
                               onResizeComplete={(deltaHours) => {
-                                if (calendarView === "7_days") return; // Resize not supported in week view yet
-                                const newDuration = Math.max(1, task.duration + deltaHours);
+                                if (calendarView === "7_days") return;
+                                const snap = calendarView === "minutes" ? 0.25 : 1;
+                                const minDuration = calendarView === "minutes" ? 0.25 : 1;
+                                const newDuration = Math.max(minDuration, Math.round((task.duration + deltaHours) / snap) * snap);
                                 if (newDuration !== task.duration) {
                                   if (checkOverlap(task.employee, currentDate.toDateString(), task.startHour, newDuration, task.id)) {
                                     showError(`🚫 No se puede extender la tarea. Choca con otra tarea de ${task.employee}.`);
@@ -506,33 +602,21 @@ export default function AdminDashboard() {
                                 }
                               }}
                             >
-                              <ViewTaskModal
-                                task={task}
-                                onUpdate={(updatedTask) => {
-                                  if (checkOverlap(updatedTask.employee, currentDate.toDateString(), updatedTask.startHour, updatedTask.duration, updatedTask.id)) {
-                                    showError(`🚫 No se puede extender la tarea. Choca con otra tarea de ${updatedTask.employee}.`);
-                                    return false;
-                                  }
-                                  updateTask(updatedTask.id, updatedTask);
-                                  return true;
-                                }}
+                              <div
+                                className="rounded-lg text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap w-full h-full group/task hover:brightness-110 transition-all"
+                                style={{ backgroundColor: getEmployeeDeptColor(task.employee) }}
                               >
-                                <div
-                                  className="rounded-lg text-white p-2 shadow-md flex justify-between items-center overflow-hidden whitespace-nowrap w-full h-full group/task hover:brightness-110 transition-all "
-                                  style={{ backgroundColor: getEmployeeDeptColor(task.employee) }}
+                                <span className="font-semibold text-xs tracking-wide truncate px-1 flex-1">{task.title}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteTask(task.id);
+                                  }}
+                                  className="opacity-0 group-hover/task:opacity-100 text-white hover:text-red-200 transition-opacity bg-black/20 hover:bg-black/40 rounded-full p-0.5 ml-1 shrink-0"
                                 >
-                                  <span className="font-semibold text-xs tracking-wide truncate px-1 flex-1">{task.title}</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteTask(task.id);
-                                    }}
-                                    className="opacity-0 group-hover/task:opacity-100 text-white hover:text-red-200 transition-opacity bg-black/20 hover:bg-black/40 rounded-full p-0.5 ml-1 shrink-0"
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                </div>
-                              </ViewTaskModal>
+                                  <X size={12} />
+                                </button>
+                              </div>
                             </DraggableTask>
                           );
                         })}
@@ -547,6 +631,25 @@ export default function AdminDashboard() {
               </CalendarDropzone>
 
             </div>
+
+            {/* ── ViewTaskModal controlado externamente ──────────────────── */}
+            {viewingTask && (
+              <ViewTaskModal
+                task={viewingTask}
+                open={!!viewingTask}
+                onOpenChange={(open) => { if (!open) setViewingTask(null); }}
+                onUpdate={(updatedTask) => {
+                  if (checkOverlap(updatedTask.employee, currentDate.toDateString(), updatedTask.startHour, updatedTask.duration, updatedTask.id)) {
+                    showError(`🚫 No se puede guardar. Choca con otra tarea de ${updatedTask.employee}.`);
+                    return false;
+                  }
+                  updateTask(updatedTask.id, updatedTask);
+                  // Keep viewingTask in sync so the modal shows fresh data
+                  setViewingTask({ ...viewingTask, ...updatedTask });
+                  return true;
+                }}
+              />
+            )}
           </div>
 
           {/* Lado Derecho: Side Panel */}
@@ -558,11 +661,19 @@ export default function AdminDashboard() {
               onRemoveItem={handleRemoveFromBoard}
               deptColorMap={deptColorMap}
               employeesByDept={employeesByDept}
+              tasksByDept={tasksByDept}
+              taskMeta={taskMeta}
             />
           </div>
         </main>
 
-        <BottomAIBar prompt={prompt} setPrompt={setPrompt} onSend={handleSendPrompt} />
+        <BottomAIBar
+          mentions={aiMentions}
+          onRemoveMention={(idx) => setAiMentions((prev) => prev.filter((_, i) => i !== idx))}
+          text={aiText}
+          onTextChange={setAiText}
+          onSend={handleSendPrompt}
+        />
       </DndContext>
     </div>
   );

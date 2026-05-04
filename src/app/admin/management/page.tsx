@@ -5,6 +5,7 @@ import { useDashboardStore } from "@/store/dashboardStore";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
+import type { AIMention } from "@/components/layout/BottomAIBar";
 import { DraggableItem } from "@/components/dnd/DraggableItem";
 import { CreateEmployeeModal } from "@/components/modals/CreateEmployeeModal";
 import { CreateDepartmentModal } from "@/components/modals/CreateDepartmentModal";
@@ -22,7 +23,8 @@ const DEPT_COLORS: Record<string, string> = {
 const TODAY_STR = new Date().toDateString();
 
 export default function AdminManagement() {
-  const [prompt, setPrompt] = useState("");
+  const [aiMentions, setAiMentions] = useState<AIMention[]>([]);
+  const [aiText, setAiText] = useState("");
 
   const {
     departments,
@@ -48,8 +50,14 @@ export default function AdminManagement() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over?.id === "ai-input-dropzone") {
-      const v = active.data.current?.value;
-      if (v) setPrompt(prev => prev ? `${prev} @${v} ` : `@${v} `);
+      const v = active.data.current?.value as string;
+      const t = active.data.current?.type as string;
+      if (v) {
+        const mentionType: AIMention["type"] =
+          t === "Employees" ? "employee" :
+          t === "Departaments" ? "department" : "task";
+        setAiMentions(prev => [...prev, { type: mentionType, display: v, payload: v }]);
+      }
     }
   };
 
@@ -156,7 +164,19 @@ export default function AdminManagement() {
 
         </main>
 
-        <BottomAIBar prompt={prompt} setPrompt={setPrompt} onSend={() => { if (prompt.trim()) { sendAIPrompt(prompt); setPrompt(""); } }} />
+        <BottomAIBar
+          mentions={aiMentions}
+          onRemoveMention={(idx) => setAiMentions(prev => prev.filter((_, i) => i !== idx))}
+          text={aiText}
+          onTextChange={setAiText}
+          onSend={() => {
+            if (!aiText.trim() && aiMentions.length === 0) return;
+            const parts = [...aiMentions.map(m => `@${m.payload}`), aiText.trim()].filter(Boolean);
+            sendAIPrompt(parts.join(" "));
+            setAiMentions([]);
+            setAiText("");
+          }}
+        />
       </DndContext>
     </div>
   );
