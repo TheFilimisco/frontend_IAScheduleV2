@@ -1,49 +1,16 @@
 import { create } from 'zustand';
+import type { Profession, Department, Employee, Task, HistoryLog } from '@/types/entities';
+import { SCHEDULE_LABELS, ROLE_LABELS } from '@/types/entities';
 
-// ─── Entity types (mirror backend toJSON output) ─────────────────────────────
-export type Profession = {
-  id: string;
-  name: string;
-  departmentId?: string;
-  isActive: boolean;
-};
+// Re-export so existing imports from this file keep working
+export type { Profession, Department, Employee, Task, HistoryLog };
+export { SCHEDULE_LABELS, ROLE_LABELS };
 
-export type Department = {
-  id: string;
-  name: string;
-  color: string;
-  description?: string;
-};
-
-export type Employee = {
-  id: string;
-  code: string;          // Unique employee code, e.g. EMP-JODO-847
-  firstName: string;
-  lastName: string;
-  departmentId?: string;
-  role?: string;
-  status?: string;
-};
-
-export type Task = {
-  id: number | string;
-  employee: string;
-  title: string;
-  description: string;
-  startHour: number;
-  duration: number;
-  color: string;
-  dateStr: string;
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
-};
-
-export type HistoryLog = {
-  id: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'ASSIGN' | 'FETCH';
-  entity: 'TASK' | 'EMPLOYEE' | 'DEPARTMENT' | 'SYSTEM';
-  details: string;
-  timestamp: Date;
-};
+// ─── API base URL ─────────────────────────────────────────────────────────────
+// Set NEXT_PUBLIC_API_URL in .env.local, e.g.: http://localhost:5000
+// All fetch calls go through this helper so the base is never hardcoded.
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+const api = (path: string) => `${API_BASE}${path}`;
 
 interface DashboardState {
   tasksData: Task[];
@@ -137,23 +104,6 @@ const MOCK_EMPLOYEES_FULL: Employee[] = [
   { id: 'mock-emp-6', code: 'EMP-MATO-006', firstName: 'María',   lastName: 'Torres',  departmentId: 'mock-dept-3', role: 'manager',  status: 'active' },
 ];
 
-// Mapa de labels para mostrar en la UI (el backend nunca toca esto)
-export const SCHEDULE_LABELS: Record<string, string> = {
-  morning:  '9am - 5pm',
-  early:    '8am - 4pm',
-  late:     '10am - 6pm',
-  night:    'Turno de noche',
-  flexible: 'Sin horario fijo',
-};
-
-// Claves cortas que coinciden con el enum del backend (Employee.role)
-export const ROLE_LABELS: Record<string, string> = {
-  employee:   'Empleado',
-  supervisor: 'Supervisor',
-  manager:    'Manager',
-  trainee:    'En prácticas',
-};
-
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   tasksData: [],
   employeesList: [],
@@ -186,14 +136,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       if (process.env.NEXT_PUBLIC_USE_API === "true") {
         const [tasksRes, sectionsRes, employeesByDeptRes, profRes, schedRes, profListRes, deptListRes, empListRes] = await Promise.all([
-          fetch('/api/tasks').then(res => res.ok ? res.json() : MOCK_TASKS),
-          fetch('/api/sections').then(res => res.ok ? res.json() : MOCK_ADMIN_SECTIONS),
-          fetch('/api/employees-by-dept').then(res => res.ok ? res.json() : MOCK_EMPLOYEES_BY_DEPT),
-          fetch('/api/professions').then(res => res.ok ? res.json() : MOCK_PROFESSIONS),
-          fetch('/api/schedules').then(res => res.ok ? res.json() : MOCK_SCHEDULES),
-          fetch('/api/professions?full=1').then(res => res.ok ? res.json() : MOCK_PROFESSIONS_LIST),
-          fetch('/api/departments').then(res => res.ok ? res.json() : MOCK_DEPARTMENTS_LIST),
-          fetch('/api/employees').then(res => res.ok ? res.json() : MOCK_EMPLOYEES_FULL),
+          fetch(api('/api/tasks')).then(res => res.ok ? res.json() : MOCK_TASKS),
+          fetch(api('/api/sections')).then(res => res.ok ? res.json() : MOCK_ADMIN_SECTIONS),
+          fetch(api('/api/employees-by-dept')).then(res => res.ok ? res.json() : MOCK_EMPLOYEES_BY_DEPT),
+          fetch(api('/api/professions')).then(res => res.ok ? res.json() : MOCK_PROFESSIONS),
+          fetch(api('/api/schedules')).then(res => res.ok ? res.json() : MOCK_SCHEDULES),
+          fetch(api('/api/professions?full=1')).then(res => res.ok ? res.json() : MOCK_PROFESSIONS_LIST),
+          fetch(api('/api/departments')).then(res => res.ok ? res.json() : MOCK_DEPARTMENTS_LIST),
+          fetch(api('/api/employees')).then(res => res.ok ? res.json() : MOCK_EMPLOYEES_FULL),
         ]);
         
         set({ 
@@ -251,15 +201,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   addTask: (task) => {
-    // Simulando API Payload
-    const apiPayload = { method: 'POST', endpoint: '/api/tasks', body: task };
+    const apiPayload = { method: 'POST', endpoint: api('/api/tasks'), body: task };
     get().addLog('CREATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     set((state) => ({ tasksData: [...state.tasksData, task] }));
   },
 
   updateTask: (taskId, updates) => {
-    // Simulando API Payload
-    const apiPayload = { method: 'PUT', endpoint: `/api/tasks/${taskId}`, body: updates };
+    const apiPayload = { method: 'PUT', endpoint: api(`/api/tasks/${taskId}`), body: updates };
     get().addLog('UPDATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     set((state) => ({
       tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t)
@@ -267,8 +215,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   deleteTask: (taskId) => {
-    // Simulando API Payload
-    const apiPayload = { method: 'DELETE', endpoint: `/api/tasks/${taskId}` };
+    const apiPayload = { method: 'DELETE', endpoint: api(`/api/tasks/${taskId}`) };
     get().addLog('DELETE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     set((state) => ({
       tasksData: state.tasksData.filter(t => t.id !== taskId)
@@ -276,13 +223,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   addDepartment: (dept) => {
-    const apiPayload = { method: 'POST', endpoint: '/api/departments', body: dept };
+    const apiPayload = { method: 'POST', endpoint: api('/api/departments'), body: dept };
     get().addLog('CREATE', 'DEPARTMENT', `API Request: ${JSON.stringify(apiPayload)}`);
     set((state) => ({ departments: [...state.departments, dept.name] }));
   },
 
   updateDepartment: (oldName, newName) => {
-    const apiPayload = { method: 'PUT', endpoint: `/api/departments/${oldName}`, body: { name: newName } };
+    const apiPayload = { method: 'PUT', endpoint: api(`/api/departments/${oldName}`), body: { name: newName } };
     get().addLog('UPDATE', 'DEPARTMENT', `API Request: ${JSON.stringify(apiPayload)}`);
     set((state) => ({
       departments: state.departments.map(d => d === oldName ? newName : d)
@@ -290,29 +237,29 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   deleteDepartment: (name) => {
-    const apiPayload = { method: 'DELETE', endpoint: `/api/departments/${name}` };
+    const apiPayload = { method: 'DELETE', endpoint: api(`/api/departments/${name}`) };
     get().addLog('DELETE', 'DEPARTMENT', `API Request: ${JSON.stringify(apiPayload)}`);
     set((state) => ({ departments: state.departments.filter(d => d !== name) }));
   },
 
   addEmployee: (emp) => {
-    const apiPayload = { method: 'POST', endpoint: '/api/employees', body: emp };
+    const apiPayload = { method: 'POST', endpoint: api('/api/employees'), body: emp };
     get().addLog('CREATE', 'EMPLOYEE', `API Request: ${JSON.stringify(apiPayload)}`);
     // Dependiendo de tu logica real, quiza debas insertarlo en employeesByDept
   },
 
   updateEmployee: (empId, updates) => {
-    const apiPayload = { method: 'PUT', endpoint: `/api/employees/${empId}`, body: updates };
+    const apiPayload = { method: 'PUT', endpoint: api(`/api/employees/${empId}`), body: updates };
     get().addLog('UPDATE', 'EMPLOYEE', `API Request: ${JSON.stringify(apiPayload)}`);
   },
 
   deleteEmployee: (empId) => {
-    const apiPayload = { method: 'DELETE', endpoint: `/api/employees/${empId}` };
+    const apiPayload = { method: 'DELETE', endpoint: api(`/api/employees/${empId}`) };
     get().addLog('DELETE', 'EMPLOYEE', `API Request: ${JSON.stringify(apiPayload)}`);
   },
 
   sendAIPrompt: (prompt) => {
-    const apiPayload = { method: 'POST', endpoint: '/api/ai/chat', body: { prompt } };
+    const apiPayload = { method: 'POST', endpoint: api('/api/ai/chat'), body: { prompt } };
     get().addLog('CREATE', 'SYSTEM', `API Request (AI): ${JSON.stringify(apiPayload)}`);
   },
 

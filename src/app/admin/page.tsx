@@ -276,7 +276,7 @@ export default function AdminDashboard() {
 
         // Validación: Empleado no puede estar en más de un departamento
         const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(value));
-        if (currentDepartment && dept && dept !== currentDepartment) {
+        if (currentDepartment && currentDepartment !== "Todos" && dept && dept !== currentDepartment) {
           showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
           return;
         }
@@ -322,13 +322,20 @@ export default function AdminDashboard() {
 
   const handleSidePanelClick = (type: string, value: string) => {
     if (type === "Departaments") {
-      setCurrentDepartment(value);
-      setEmployeesList(employeesByDept[value] || []);
+      if (!value) {
+        // Clear filter -> show all
+        setCurrentDepartment("Todos");
+        const allEmployees = Object.values(employeesByDept).flat();
+        setEmployeesList(allEmployees);
+      } else {
+        setCurrentDepartment(value);
+        setEmployeesList(employeesByDept[value] || []);
+      }
     } else if (type === "Employees") {
 
       // Validación: Empleado no puede estar en más de un departamento
       const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(value));
-      if (currentDepartment && dept && dept !== currentDepartment) {
+      if (currentDepartment && currentDepartment !== "Todos" && dept && dept !== currentDepartment) {
         showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
         return;
       }

@@ -55,7 +55,7 @@ export default function AdminManagement() {
       if (v) {
         const mentionType: AIMention["type"] =
           t === "Employees" ? "employee" :
-          t === "Departaments" ? "department" : "task";
+            t === "Departaments" ? "department" : "task";
         setAiMentions(prev => [...prev, { type: mentionType, display: v, payload: v }]);
       }
     }

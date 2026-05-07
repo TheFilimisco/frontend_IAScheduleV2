@@ -15,7 +15,7 @@ export function ManagementSection({ title, addButton, children, minHeight = "120
       <div className="mb-2">{addButton}</div>
       <div className="rounded-xl overflow-hidden shadow-lg flex flex-col">
         <div className="bg-[#1a1a1a] text-white px-6 py-4 font-bold text-lg">{title}</div>
-        <div className="bg-[#999999] p-6 flex flex-col gap-3" style={{ minHeight }}>
+        <div className="bg-[#999999] p-6 flex flex-row flex-wrap content-start gap-3" style={{ minHeight }}>
           {children}
         </div>
       </div>

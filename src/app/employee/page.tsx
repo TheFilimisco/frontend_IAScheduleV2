@@ -24,7 +24,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function EmployeeDashboard() {
-  const { tasksData, employeesByDept, fetchData, calendarView: storeView } =
+  const { tasksData, employeesByDept, fetchData, updateTask, calendarView: storeView } =
     useDashboardStore();
 
   // ── State ────────────────────────────────────────────────────────────────
@@ -275,15 +275,16 @@ export default function EmployeeDashboard() {
                       const pos = getTaskPosition(task);
                       if (!pos) return null;
                       const dotColor = task.priority ? PRIORITY_COLORS[task.priority] : undefined;
+                      const isCompleted = completedTaskIds.has(task.id);
                       return (
                         <button
                           key={task.id}
                           onClick={() => setViewingTask(task)}
-                          className="absolute top-2 bottom-2 rounded-lg text-white p-2 shadow-md flex items-center gap-1.5 overflow-hidden whitespace-nowrap hover:brightness-110 transition-all text-left"
+                          className={`absolute top-2 bottom-2 rounded-lg text-white p-2 shadow-md flex items-center gap-1.5 overflow-hidden whitespace-nowrap hover:brightness-110 transition-all text-left ${isCompleted ? "opacity-90" : ""}`}
                           style={{
                             left: `${pos.leftPercent}%`,
                             width: `${pos.widthPercent}%`,
-                            backgroundColor: myDeptColor,
+                            backgroundColor: isCompleted ? "#16a34a" : myDeptColor,
                           }}
                         >
                           {dotColor && (
@@ -412,12 +413,19 @@ export default function EmployeeDashboard() {
         </div>
       </main>
 
-      {/* ViewTaskModal (read-only for employee — no onUpdate) */}
+      {/* ViewTaskModal (read-only for admin fields, but allows comments for completed tasks) */}
       {viewingTask && (
         <ViewTaskModal
           task={viewingTask}
           open={!!viewingTask}
           onOpenChange={(open) => { if (!open) setViewingTask(null); }}
+          onUpdate={(updatedTask) => {
+            updateTask(updatedTask.id, updatedTask);
+            setViewingTask({ ...viewingTask, ...updatedTask });
+            return true;
+          }}
+          isCompleted={completedTaskIds.has(viewingTask.id)}
+          readOnlyAdminFields={true}
         />
       )}
     </div>

@@ -2,30 +2,45 @@
 
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Clock, CalendarDays, User, AlignLeft, Edit2, Check } from "lucide-react";
+import { Clock, CalendarDays, User, AlignLeft, Edit2, Check, MessageSquare } from "lucide-react";
 
 export function ViewTaskModal({
   task,
   open,
   onOpenChange,
   onUpdate,
+  isCompleted = false,
+  readOnlyAdminFields = false,
 }: {
   task: any;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdate?: (updatedTask: any) => boolean | void;
+  isCompleted?: boolean;
+  readOnlyAdminFields?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [desc, setDesc] = useState(task.description || "");
   const [editDuration, setEditDuration] = useState(task.duration || 1);
   const [editStartHour, setEditStartHour] = useState(task.startHour || 9);
 
+  const [comment, setComment] = useState(task.comment || "");
+  const [isEditingComment, setIsEditingComment] = useState(false);
+
   const handleSave = () => {
     if (onUpdate) {
-      const success = onUpdate({ ...task, description: desc, duration: editDuration, startHour: editStartHour });
+      const success = onUpdate({ ...task, description: desc, duration: editDuration, startHour: editStartHour, comment });
       if (success === false) return;
     }
     setIsEditing(false);
+  };
+
+  const handleSaveComment = () => {
+    if (onUpdate) {
+      const success = onUpdate({ ...task, comment });
+      if (success === false) return;
+    }
+    setIsEditingComment(false);
   };
 
   return (
@@ -106,7 +121,7 @@ export function ViewTaskModal({
                 <AlignLeft size={16} />
                 <span>Description</span>
               </div>
-              {onUpdate && (
+              {!readOnlyAdminFields && onUpdate && (
                 <button
                   onClick={() => isEditing ? handleSave() : setIsEditing(true)}
                   className="flex items-center gap-1 text-xs px-2 py-1 bg-gray-100 dark:bg-[#333] hover:bg-gray-200 dark:hover:bg-[#444] rounded-md transition-colors font-medium text-gray-700 dark:text-gray-200"
@@ -133,6 +148,44 @@ export function ViewTaskModal({
               </p>
             )}
           </div>
+
+          {/* Employee Comment */}
+          {(isCompleted || task.comment) && (
+            <div className="flex flex-col gap-2 mt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 font-semibold text-sm">
+                  <MessageSquare size={16} />
+                  <span>Comentarios del Empleado</span>
+                </div>
+                {readOnlyAdminFields && isCompleted && onUpdate && (
+                  <button
+                    onClick={() => isEditingComment ? handleSaveComment() : setIsEditingComment(true)}
+                    className="flex items-center gap-1 text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-400 rounded-md transition-colors font-medium"
+                  >
+                    {isEditingComment ? (
+                      <><Check size={14} /> Guardar</>
+                    ) : (
+                      <><Edit2 size={14} /> Editar Comentario</>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {isEditingComment ? (
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  className="text-sm text-gray-800 dark:text-gray-200 bg-green-50/50 dark:bg-[#222222] p-3 rounded-xl border-2 border-green-400 min-h-[80px] outline-none transition-colors w-full resize-none"
+                  autoFocus
+                  placeholder="Escribe tu reporte o comentario aquí..."
+                />
+              ) : (
+                <p className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-[#222222] p-4 rounded-xl border border-gray-100 dark:border-gray-700 min-h-[80px] leading-relaxed transition-colors whitespace-pre-wrap">
+                  {task.comment ? task.comment : <span className="italic text-gray-400 dark:text-gray-500">Sin comentarios aún.</span>}
+                </p>
+              )}
+            </div>
+          )}
 
         </div>
       </DialogContent>

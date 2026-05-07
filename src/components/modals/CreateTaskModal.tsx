@@ -41,9 +41,9 @@ const EMPTY_FORM: TaskFormData = {
 
 // Priority badge colors (for the visual hint next to each option)
 const PRIORITY_COLORS: Record<string, string> = {
-  low:    "#22c55e",
+  low: "#22c55e",
   medium: "#eab308",
-  high:   "#f97316",
+  high: "#f97316",
   urgent: "#ef4444",
 };
 
@@ -67,10 +67,17 @@ export function CreateTaskModal({ children, initialData, onSave }: CreateTaskMod
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const safeForm = { ...form };
+    if (!safeForm.durationMinutes || safeForm.durationMinutes <= 0) {
+      safeForm.durationMinutes = 60;
+    }
+
     // Strip empty optional strings so Mongoose doesn't complain
     const payload = Object.fromEntries(
-      Object.entries(form).filter(([, v]) => v !== "" && v !== undefined)
+      Object.entries(safeForm).filter(([, v]) => v !== "" && v !== undefined)
     ) as TaskFormData;
+
     if (onSave) onSave(payload);
     setOpen(false);
 
@@ -243,12 +250,23 @@ export function CreateTaskModal({ children, initialData, onSave }: CreateTaskMod
             <div className="flex items-center gap-3">
               <Input
                 type="number"
-                min={1}
+                min={15}
+                max={480}
                 step={15}
                 placeholder="60"
+                required
                 className={`${inputCls} w-28`}
-                value={form.durationMinutes}
-                onChange={(e) => set("durationMinutes", Math.max(1, parseInt(e.target.value) || 60))}
+                value={form.durationMinutes || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "") {
+                    set("durationMinutes", "" as any);
+                  } else {
+                    let num = parseInt(val, 10);
+                    if (num > 480) num = 480;
+                    set("durationMinutes", num);
+                  }
+                }}
               />
               {/* Quick-pick buttons */}
               <div className="flex gap-1.5">
@@ -257,21 +275,20 @@ export function CreateTaskModal({ children, initialData, onSave }: CreateTaskMod
                     key={min}
                     type="button"
                     onClick={() => set("durationMinutes", min)}
-                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                      form.durationMinutes === min
-                        ? "bg-white text-black"
-                        : "bg-[#333333] text-gray-400 hover:bg-[#444444] hover:text-white"
-                    }`}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${form.durationMinutes === min
+                      ? "bg-white text-black"
+                      : "bg-[#333333] text-gray-400 hover:bg-[#444444] hover:text-white"
+                      }`}
                   >
-                    {min < 60 ? `${min}m` : `${min / 60}h`}
+                    {min <= 60 ? `${min}m` : `${min / 60}h`}
                   </button>
                 ))}
               </div>
             </div>
             <p className="text-[11px] text-gray-500">
-              {form.durationMinutes >= 60
-                ? `${Math.floor(form.durationMinutes / 60)}h ${form.durationMinutes % 60 > 0 ? `${form.durationMinutes % 60}m` : ""}`.trim()
-                : `${form.durationMinutes} min`}
+              {(form.durationMinutes || 0) >= 60
+                ? `${Math.floor((form.durationMinutes as number) / 60)}h ${(form.durationMinutes as number) % 60 > 0 ? `${(form.durationMinutes as number) % 60}m` : ""}`.trim()
+                : `${form.durationMinutes || 0} min`}
               {" "}· Used by the calendar to set the task width
             </p>
           </div>

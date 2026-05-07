@@ -83,7 +83,7 @@ export function TasksSection({
         </div>
 
         {/* Body */}
-        <div className="bg-[#999999] p-6 min-h-[320px] flex flex-col gap-3">
+        <div className="bg-[#999999] p-6 min-h-[320px] flex flex-row flex-wrap gap-3 content-start">
           {filtered.length > 0 ? (
             filtered.map((task, idx) => (
               <DraggableItem key={idx} id={`drag-T-${task.title}-${idx}`} data={{ type: "Tasks", value: task.title }}>

@@ -34,15 +34,15 @@ export function SidePanel({
   const PRIORITY_ORDER: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
   const PRIORITY_COLORS: Record<string, string> = {
     urgent: "#ef4444",
-    high:   "#f97316",
+    high: "#f97316",
     medium: "#eab308",
-    low:    "#22c55e",
+    low: "#22c55e",
   };
   const PRIORITY_LABELS: Record<string, string> = {
     urgent: "Urgent",
-    high:   "High",
+    high: "High",
     medium: "Medium",
-    low:    "Low",
+    low: "Low",
   };
   const [openSections, setOpenSections] = useState<string[]>(sections.map((s) => s.title));
   /** The department name currently selected for filtering, or null for no filter */
@@ -58,7 +58,9 @@ export function SidePanel({
   const handleDeptClick = (deptName: string) => {
     const next = selectedDept === deptName ? null : deptName;
     setSelectedDept(next);
-    if (onItemClick) onItemClick("Departaments", deptName);
+    if (onItemClick) {
+      onItemClick("Departaments", next || "");
+    }
   };
 
   // Returns the border-left color for an employee based on their department
@@ -102,7 +104,10 @@ export function SidePanel({
             Filtering: <strong>{selectedDept}</strong>
           </span>
           <button
-            onClick={() => setSelectedDept(null)}
+            onClick={() => {
+              setSelectedDept(null);
+              if (onItemClick) onItemClick("Departaments", "");
+            }}
             className="ml-2 hover:opacity-70 transition-opacity"
             title="Clear filter"
           >
@@ -185,11 +190,10 @@ export function SidePanel({
                           <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                             <div
                               onClick={() => handleDeptClick(item)}
-                              className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-all text-white ${
-                                isSelected
+                              className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-all text-white ${isSelected
                                   ? "ring-2 ring-white/60 brightness-110 scale-[1.02]"
                                   : "hover:brightness-110"
-                              }`}
+                                }`}
                               style={{ backgroundColor: deptColor }}
                             >
                               <span>{item}</span>
@@ -209,11 +213,10 @@ export function SidePanel({
                         return (
                           <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                             <div
-                              className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors border-l-4 ${
-                                isActive
+                              className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors border-l-4 ${isActive
                                   ? "bg-[#222222] hover:bg-[#2a2a2a]"
                                   : "bg-[#333333] hover:bg-[#444444]"
-                              } text-white`}
+                                } text-white`}
                               style={{ borderLeftColor: borderColor }}
                             >
                               <span>{item}</span>
@@ -241,11 +244,10 @@ export function SidePanel({
                       return (
                         <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                           <div
-                            className={`px-3 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors ${
-                              isActive
+                            className={`px-3 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors ${isActive
                                 ? "bg-[#222222] border-l-4 border-blue-500"
                                 : "bg-[#333333] hover:bg-[#444444]"
-                            } text-white`}
+                              } text-white`}
                           >
                             <span className="flex items-center gap-2 min-w-0">
                               {/* Priority dot */}
