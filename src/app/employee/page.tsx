@@ -24,7 +24,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function EmployeeDashboard() {
-  const { tasksData, employeesByDept, fetchData, updateTask, calendarView: storeView } =
+  const { tasksData, employeesByDept, fetchData, updateTask } =
     useDashboardStore();
 
   // ── State ────────────────────────────────────────────────────────────────

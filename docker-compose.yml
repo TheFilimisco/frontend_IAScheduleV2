@@ -1,0 +1,14 @@
+services:
+  nextjs-app:
+    build: .
+    container_name: iaschedulev2_frontend_nextjs
+    restart: always
+    # No mapeamos puertos (80/443) aquí, NPM se encarga
+    expose:
+      - "3000"
+    networks:
+      - proxy_network
+
+networks:
+  proxy_network:
+    external: true

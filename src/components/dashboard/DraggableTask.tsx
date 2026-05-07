@@ -5,7 +5,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
 interface DraggableTaskProps {
-  id: number;
+  id: number | string;
   style?: React.CSSProperties;
   children: React.ReactNode;
   onResizeComplete?: (deltaHours: number) => void;

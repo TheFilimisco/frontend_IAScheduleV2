@@ -62,7 +62,7 @@ export function CreateTaskModal({ children, initialData, onSave }: CreateTaskMod
     ? employeesFullList.filter((e) => e.departmentId === form.departmentId)
     : employeesFullList;
 
-  const set = (field: keyof TaskFormData, value: string | number) =>
+  const set = (field: keyof TaskFormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,7 +76,7 @@ export function CreateTaskModal({ children, initialData, onSave }: CreateTaskMod
     // Strip empty optional strings so Mongoose doesn't complain
     const payload = Object.fromEntries(
       Object.entries(safeForm).filter(([, v]) => v !== "" && v !== undefined)
-    ) as TaskFormData;
+    ) as unknown as TaskFormData;
 
     if (onSave) onSave(payload);
     setOpen(false);

@@ -84,7 +84,7 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
   const professionsList = useDashboardStore((s) => s.professionsList);
   const departmentsList = useDashboardStore((s) => s.departmentsList);
 
-  const set = (field: keyof EmployeeFormData, value: string) =>
+  const set = (field: keyof EmployeeFormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   // ── Debounced code validation ──────────────────────────────────────────────

@@ -158,7 +158,7 @@ export default function AdminDashboard() {
   };
 
   // Función auxiliar para verificar si hay superposición de horarios
-  const checkOverlap = (emp: string, dateStr: string, startHour: number, duration: number, ignoreTaskId: number | null = null) => {
+  const checkOverlap = (emp: string, dateStr: string, startHour: number, duration: number, ignoreTaskId: number | string | null = null) => {
     return tasksData.some(t =>
       t.employee === emp &&
       t.dateStr === dateStr &&
@@ -305,7 +305,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description, startHour: hour, duration: 1, color: "bg-teal-500", dateStr: currentDate.toDateString() });
+    addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description || "", startHour: hour, duration: 1, color: "bg-teal-500", dateStr: currentDate.toDateString() });
   };
 
   const handleSendPrompt = () => {
@@ -351,7 +351,7 @@ export default function AdminDashboard() {
     if (calendarView === "7_days") {
       const startOfWeek = new Date(currentDate);
       startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
-      const weekDays = [];
+      const weekDays: string[] = [];
       for(let i=0; i<7; i++) {
         const d = new Date(startOfWeek);
         d.setDate(startOfWeek.getDate() + i);
@@ -552,7 +552,7 @@ export default function AdminDashboard() {
                                 showError(`🚫 El horario ya está ocupado para ${emp}.`);
                                 return;
                               }
-                              addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description, startHour: hourToUse, duration: slotDuration, color: "bg-teal-500", dateStr: dateToUse });
+                              addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description || "", startHour: hourToUse, duration: slotDuration, color: "bg-teal-500", dateStr: dateToUse });
                             }}
                           >
                             <DroppableCell id={`cell-${emp}-${slot.value}`}>
