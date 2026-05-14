@@ -1,7 +1,6 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { ReactNode } from "react";
 
 interface DraggableItemProps {
@@ -11,15 +10,13 @@ interface DraggableItemProps {
 }
 
 export function DraggableItem({ id, data, children }: DraggableItemProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id,
     data,
   });
 
   const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 50 : "auto",
+    opacity: isDragging ? 0.35 : 1,
   };
 
   return (

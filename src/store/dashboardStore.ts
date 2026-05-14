@@ -29,11 +29,11 @@ interface DashboardState {
   error: string | null;
 
   // Initial Fetch
-  fetchData: () => Promise<void>;
+  fetchData: (silent?: boolean) => Promise<void>;
   
   // Tasks
   setTasksData: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
-  addTask: (task: Task) => void;
+  addTask: (task: Task) => Promise<{ ok: boolean; error?: string }>;
   updateTask: (taskId: number | string, updates: Partial<Task>) => void;
   deleteTask: (taskId: number | string) => void;
 
@@ -48,7 +48,8 @@ interface DashboardState {
   deleteEmployee: (empId: string) => Promise<{ ok: boolean; error?: string }>;
   
   // AI
-  sendAIPrompt: (prompt: string) => void;
+  sendAIPrompt: (prompt: string) => Promise<{ message: string | null; pendingConfirmation: { id: string; description: string } | null }>;
+  confirmAIAction: (id: string, approved: boolean) => Promise<string | null>;
   
   // Filter/UI
   setEmployeesList: (employees: string[] | ((prev: string[]) => string[])) => void;
@@ -173,14 +174,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
     set((state) => ({
       history: [
-        { id: Date.now().toString() + Math.random().toString(36).substr(2, 9), action, entity, details, timestamp: new Date() },
+        { id: Date.now().toString() + Math.random().toString(36).slice(2, 11), action, entity, details, timestamp: new Date() },
         ...state.history
       ].slice(0, 100) // Keep last 100 logs
     }));
   },
 
-  fetchData: async () => {
-    set({ isLoading: true, error: null });
+  fetchData: async (silent = false) => {
+    if (!silent) set({ isLoading: true, error: null });
     try {
       if (process.env.NEXT_PUBLIC_USE_API === "true") {
         const [tasksRes, sectionsRes, employeesByDeptRes, profRes, schedRes, profListRes, deptListRes, empListRes, empAllRes] = await Promise.all([
@@ -278,7 +279,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const apiPayload = { method: 'POST', endpoint: api('/api/tasks'), body: apiTask };
     get().addLog('CREATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     if (process.env.NEXT_PUBLIC_USE_API === "true") {
-      // Optimistic update
       const tempId = task.id;
       set((state) => ({ tasksData: [...state.tasksData, task] }));
 
@@ -290,21 +290,25 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         });
         if (res.ok) {
           const data = await res.json();
-          // Replace temp task with real data from API
+          const realId = data.task?._id || data.task?.id || tempId;
           set((state) => ({
-            tasksData: state.tasksData.map(t => t.id === tempId ? mapApiTaskToFrontend(data.task || apiTask) : t)
+            tasksData: state.tasksData.map(t => t.id === tempId ? { ...t, id: realId } : t)
           }));
+          return { ok: true };
         } else {
-          // Revert on error
           set((state) => ({ tasksData: state.tasksData.filter(t => t.id !== tempId) }));
+          const data = await res.json().catch(() => ({}));
+          const msg = data.error || data.message || `Error ${res.status}`;
+          return { ok: false, error: msg };
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error creating task", err);
-        // Revert on error
         set((state) => ({ tasksData: state.tasksData.filter(t => t.id !== tempId) }));
+        return { ok: false, error: err?.message ?? 'Error de conexión' };
       }
     } else {
       set((state) => ({ tasksData: [...state.tasksData, task] }));
+      return { ok: true };
     }
   },
 
@@ -343,12 +347,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(apiUpdates)
         });
-        if (res.ok) {
-          const data = await res.json();
-          set((state) => ({
-            tasksData: state.tasksData.map(t => t.id === taskId ? mapApiTaskToFrontend(data.task) : t)
-          }));
-        } else {
+        if (!res.ok) {
           // Revert on error
           set({ tasksData: previousTasks });
         }
@@ -560,18 +559,34 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const apiPayload = { method: 'POST', endpoint: api('/api/ia/schedule'), body: { prompt } };
     get().addLog('CREATE', 'SYSTEM', `API Request (AI): ${JSON.stringify(apiPayload)}`);
     if (process.env.NEXT_PUBLIC_USE_API === "true") {
-      try {
-        const res = await fetch(api('/api/ia/schedule'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          get().addLog('CREATE', 'SYSTEM', `AI Response: ${data.message}`);
-        }
-      } catch (e) {}
+      const res = await fetch(api('/api/ia/schedule'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Error ${res.status}`);
+      }
+      const data = await res.json();
+      get().addLog('CREATE', 'SYSTEM', `AI Response: ${data.message}`);
+      return { message: data.message ?? null, pendingConfirmation: data.pendingConfirmation ?? null };
     }
+    return { message: null, pendingConfirmation: null };
+  },
+
+  confirmAIAction: async (id, approved) => {
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      const res = await fetch(api('/api/ia/confirm'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, approved })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      return data.message ?? null;
+    }
+    return null;
   },
 
   setEmployeesList: (updater) => {

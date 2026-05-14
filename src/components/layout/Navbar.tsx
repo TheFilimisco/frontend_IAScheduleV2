@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Home, User, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAuthStore } from "@/store/authStore";
 
 export function Navbar({ role = "admin" }: { role?: "admin" | "employee" }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const logout = useAuthStore(s => s.logout);
+
+  const handleLogout = () => {
+    logout();
+    router.push("/");
+  };
 
   return (
     <>
@@ -32,9 +40,9 @@ export function Navbar({ role = "admin" }: { role?: "admin" | "employee" }) {
               <div className="w-px h-6 bg-gray-500 mx-2"></div>
             </>
           )}
-          <Link href="/" className="p-1.5 rounded-md text-gray-300 hover:bg-[#333333] hover:text-white transition-colors">
+          <button onClick={handleLogout} className="p-1.5 rounded-md text-gray-300 hover:bg-[#333333] hover:text-white transition-colors">
             <LogOut size={20} />
-          </Link>
+          </button>
         </div>
       </nav>
       <div className="absolute top-5 right-5 z-50">

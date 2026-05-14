@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { useDashboardStore } from "@/store/dashboardStore";
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
 import type { AIMention } from "@/components/layout/BottomAIBar";
@@ -11,13 +12,15 @@ import { CreateEmployeeModal } from "@/components/modals/CreateEmployeeModal";
 import { CreateDepartmentModal } from "@/components/modals/CreateDepartmentModal";
 import { ManagementSection, PlusButton } from "./_components/ManagementSection";
 import { ManagementPill } from "./_components/ManagementPill";
-import { TasksSection, TaskItem } from "./_components/TasksSection";
+import { TasksSection } from "./_components/TasksSection";
 
 const TODAY_STR = new Date().toDateString();
 
 export default function AdminManagement() {
   const [aiMentions, setAiMentions] = useState<AIMention[]>([]);
-  const [aiText, setAiText] = useState("");
+  const [isAILoading, setIsAILoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiConfirmation, setAiConfirmation] = useState<{ id: string; description: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const {
@@ -34,15 +37,23 @@ export default function AdminManagement() {
     updateTask: storeUpdateTask,
     deleteTask: storeDeleteTask,
     sendAIPrompt,
+    confirmAIAction,
     fetchData
   } = useDashboardStore();
 
 
   const [selectedDay, setSelectedDay] = useState(TODAY_STR);
+  const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const value = event.active.data.current?.value as string;
+    if (value) setActiveOverlay(value);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveOverlay(null);
     const { active, over } = event;
     if (over?.id === "ai-input-dropzone") {
       const v = active.data.current?.value as string;
@@ -109,7 +120,7 @@ export default function AdminManagement() {
     <div className="min-h-screen bg-[#dfdfdf] dark:bg-background flex flex-col pb-24 transition-colors duration-300">
       <Navbar role="admin" />
 
-      <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
+      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} sensors={sensors}>
         <main className="flex-1 flex flex-col items-center gap-6 px-10  pt-24 lg:pt-4 pb-24 lg:pb-0 w-full">
 
           {/* ── Error Banner ── */}
@@ -204,16 +215,55 @@ export default function AdminManagement() {
         <BottomAIBar
           mentions={aiMentions}
           onRemoveMention={(idx) => setAiMentions(prev => prev.filter((_, i) => i !== idx))}
-          text={aiText}
-          onTextChange={setAiText}
-          onSend={() => {
-            if (!aiText.trim() && aiMentions.length === 0) return;
-            const parts = [...aiMentions.map(m => `@${m.payload}`), aiText.trim()].filter(Boolean);
-            sendAIPrompt(parts.join(" "));
-            setAiMentions([]);
-            setAiText("");
+          isLoading={isAILoading}
+          aiResponse={aiResponse}
+          pendingConfirmation={aiConfirmation}
+          onConfirm={async (id, approved) => {
+            setAiConfirmation(null);
+            flushSync(() => setIsAILoading(true));
+            try {
+              const message = await confirmAIAction(id, approved);
+              setAiResponse(message ?? (approved ? "Eliminación realizada." : "Operación cancelada."));
+              setTimeout(() => setAiResponse(null), 6000);
+            } catch {
+              setErrorMsg("🚫 Error al confirmar la acción.");
+            } finally {
+              setIsAILoading(false);
+              await fetchData(true);
+            }
+          }}
+          onSend={async (text) => {
+            if (!text.trim() && aiMentions.length === 0) return;
+            const parts = [...aiMentions.map(m => `@${m.payload}`), text.trim()].filter(Boolean);
+            flushSync(() => {
+              setAiMentions([]);
+              setAiResponse(null);
+              setAiConfirmation(null);
+              setIsAILoading(true);
+            });
+            try {
+              const result = await sendAIPrompt(parts.join(" "));
+              setAiResponse(result.message ?? "La IA no devolvió una respuesta.");
+              if (result.pendingConfirmation) {
+                setAiConfirmation(result.pendingConfirmation);
+              } else {
+                setTimeout(() => setAiResponse(null), 8000);
+              }
+            } catch {
+              setErrorMsg("🚫 Error al contactar la IA. Verifica que el servidor esté activo.");
+            } finally {
+              setIsAILoading(false);
+              await fetchData(true);
+            }
           }}
         />
+        <DragOverlay dropAnimation={null}>
+          {activeOverlay ? (
+            <div className="px-4 py-2 rounded-md text-sm font-medium text-white bg-gray-700 shadow-xl opacity-95 cursor-grabbing select-none">
+              {activeOverlay}
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </div>
   );

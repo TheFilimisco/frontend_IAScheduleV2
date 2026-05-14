@@ -45,7 +45,6 @@ export function SidePanel({
     low: "Low",
   };
   const [openSections, setOpenSections] = useState<string[]>(sections.map((s) => s.title));
-  /** The department name currently selected for filtering, or null for no filter */
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
 
   const toggleSection = (title: string) => {
@@ -145,7 +144,7 @@ export function SidePanel({
 
             {/* Content */}
             {isOpen && (
-              <div className="bg-[#a3a3a3] p-3 rounded-xl flex flex-col gap-2 shadow-inner min-h-[60px]">
+              <div className="bg-[#a3a3a3] p-3 rounded-xl flex flex-col gap-2 shadow-inner min-h-15 max-h-45 overflow-y-auto">
                 {visibleItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-4 text-center">
                     <p className="text-xs text-gray-600 font-medium">
@@ -191,8 +190,8 @@ export function SidePanel({
                             <div
                               onClick={() => handleDeptClick(item)}
                               className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-pointer transition-all text-white ${isSelected
-                                  ? "ring-2 ring-white/60 brightness-110 scale-[1.02]"
-                                  : "hover:brightness-110"
+                                ? "ring-2 ring-white/60 brightness-110 scale-[1.02]"
+                                : "hover:brightness-110"
                                 }`}
                               style={{ backgroundColor: deptColor }}
                             >
@@ -214,8 +213,8 @@ export function SidePanel({
                           <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                             <div
                               className={`px-4 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors border-l-4 ${isActive
-                                  ? "bg-[#222222] hover:bg-[#2a2a2a]"
-                                  : "bg-[#333333] hover:bg-[#444444]"
+                                ? "bg-[#222222] hover:bg-[#2a2a2a]"
+                                : "bg-[#333333] hover:bg-[#444444]"
                                 } text-white`}
                               style={{ borderLeftColor: borderColor }}
                             >
@@ -245,8 +244,8 @@ export function SidePanel({
                         <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
                           <div
                             className={`px-3 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors ${isActive
-                                ? "bg-[#222222] border-l-4 border-blue-500"
-                                : "bg-[#333333] hover:bg-[#444444]"
+                              ? "bg-[#222222] border-l-4 border-blue-500"
+                              : "bg-[#333333] hover:bg-[#444444]"
                               } text-white`}
                           >
                             <span className="flex items-center gap-2 min-w-0">

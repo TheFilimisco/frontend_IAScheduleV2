@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Eye, EyeOff } from "lucide-react";
 import { useDashboardStore } from "@/store/dashboardStore";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -78,6 +79,8 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
   const [form, setForm] = useState<EmployeeFormData>({ ...EMPTY_FORM, ...initialData });
   const [codeEdited, setCodeEdited] = useState(isEdit);
   const [codeStatus, setCodeStatus] = useState<CodeStatus>("idle");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pull lists from the store
@@ -124,11 +127,12 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (codeStatus === "taken") return; // safety guard
-    // Strip empty optional fields so Mongoose doesn't complain
+    if (codeStatus === "taken") return;
+    if (!isEdit && password.length < 8) return; // browser validation covers this but safety guard
     const payload = Object.fromEntries(
       Object.entries(form).filter(([, v]) => v !== "" && v !== undefined)
     ) as EmployeeFormData;
+    if (!isEdit || password.length >= 8) (payload as any).password = password;
     if (onSave) onSave(payload);
     setOpen(false);
 
@@ -137,6 +141,8 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
       setCodeEdited(false);
       setCodeStatus("idle");
     }
+    setPassword("");
+    setShowPassword(false);
   };
 
   const inputCls = "bg-[#333333] border-none focus-visible:ring-gray-500 text-white placeholder-gray-400";
@@ -373,9 +379,36 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
             </Select>
           </div>
 
+          {/* ── Account Password (create only) ── */}
+          {!isEdit && (
+            <div className="flex flex-col gap-1 border-t border-gray-700 pt-4 mt-1">
+              <label className="text-xs text-gray-400 font-medium">Account Password</label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Min. 8 characters"
+                  className={`${inputCls} pr-10`}
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500">Used to log into the app · not stored in the employee record</p>
+            </div>
+          )}
+
           <Button
             type="submit"
-            disabled={codeStatus === "taken" || codeStatus === "checking"}
+            disabled={codeStatus === "taken" || codeStatus === "checking" || (!isEdit && password.length < 8)}
             className="py-5 bg-white text-black hover:bg-gray-200 mt-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {codeStatus === "checking" ? "Validating code..." : isEdit ? "Update" : "Create Employee"}

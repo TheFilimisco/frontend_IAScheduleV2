@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import { useDashboardStore } from "@/store/dashboardStore";
 import type { Task } from "@/store/dashboardStore";
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Navbar } from "@/components/layout/Navbar";
 import { BottomAIBar } from "@/components/layout/BottomAIBar";
 import type { AIMention } from "@/components/layout/BottomAIBar";
@@ -14,14 +15,13 @@ import { ChevronLeft, ChevronRight, X, Calendar } from "lucide-react";
 // Componente para celdas droppables individuales (intersecto Empleado-Hora)
 import { DroppableCell } from "@/components/dashboard/DroppableCell";
 import { DraggableTask } from "@/components/dashboard/DraggableTask";
-import { CalendarDropzone } from "@/components/dashboard/CalendarDropzone";
 
 
 
 export default function AdminDashboard() {
-  // Estado del AI Bar (chips de menciones + texto libre)
+  // Estado del AI Bar (chips de menciones)
   const [aiMentions, setAiMentions] = useState<AIMention[]>([]);
-  const [aiText, setAiText] = useState("");
+  const [aiConfirmation, setAiConfirmation] = useState<{ id: string; description: string } | null>(null);
 
   // Estado de Fecha
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -34,6 +34,9 @@ export default function AdminDashboard() {
 
   // Estado de Departamento Actual ('All' = todos los empleados)
   const [currentDepartment, setCurrentDepartment] = useState("All");
+
+  // Ítem activo durante drag (para DragOverlay)
+  const [activeOverlay, setActiveOverlay] = useState<{ type: string; value: string } | null>(null);
 
   const {
     tasksData,
@@ -50,6 +53,7 @@ export default function AdminDashboard() {
     deleteTask,
     setEmployeesList,
     sendAIPrompt,
+    confirmAIAction,
     addLog
   } = useDashboardStore();
 
@@ -151,6 +155,8 @@ export default function AdminDashboard() {
   };
 
   const [errorMsg, setErrorMsg] = useState("");
+  const [isAILoading, setIsAILoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
 
   const showError = (msg: string) => {
     setErrorMsg(msg);
@@ -168,7 +174,15 @@ export default function AdminDashboard() {
     );
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragStart = (event: DragStartEvent) => {
+    const data = event.active.data.current;
+    if (data?.type && data?.value) {
+      setActiveOverlay({ type: data.type, value: data.value });
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveOverlay(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -258,7 +272,8 @@ export default function AdminDashboard() {
           return;
         }
 
-        addTask({ id: Date.now(), employee: emp, title: taskName, description: "", startHour: hour, duration: slotDuration, color: "bg-yellow-600", dateStr: currentDate.toDateString() });
+        const result = await addTask({ id: Date.now(), employee: emp, title: taskName, description: "", startHour: hour, duration: slotDuration, color: "bg-yellow-600", dateStr: currentDate.toDateString() });
+        if (!result.ok) showError(`🚫 No se pudo guardar la tarea: ${result.error}`);
       }
       return;
     }
@@ -289,35 +304,67 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleCreateTaskFromCell = (emp: string, hour: number, data: any) => {
+  const handleCreateTaskFromCell = async (emp: string, hour: number, data: { title?: string; description?: string }) => {
     if (!data.title) return;
 
-    // Validación: Tareas exclusivas por día (incluso al crearlas)
     const currentDayTasks = tasksData.filter(t => t.dateStr === currentDate.toDateString());
     if (currentDayTasks.some(t => t.title === data.title)) {
       showError(`🚫 La tarea "${data.title}" ya existe en el calendario de hoy. Elige otro nombre u otra tarea.`);
       return;
     }
 
-    // Validación: Superposición de horarios
     if (checkOverlap(emp, currentDate.toDateString(), hour, 1)) {
       showError(`🚫 El horario de las ${hour}:00 ya está ocupado para ${emp}.`);
       return;
     }
 
-    addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description || "", startHour: hour, duration: 1, color: "bg-teal-500", dateStr: currentDate.toDateString() });
+    const result = await addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description || "", startHour: hour, duration: 1, color: "bg-teal-500", dateStr: currentDate.toDateString() });
+    if (!result.ok) showError(`🚫 No se pudo guardar la tarea: ${result.error}`);
   };
 
-  const handleSendPrompt = () => {
-    if (!aiText.trim() && aiMentions.length === 0) return;
-    // Build payload: mention payloads first, then the free text
+  const handleSendPrompt = async (text: string) => {
+    if (!text.trim() && aiMentions.length === 0) return;
     const parts = [
       ...aiMentions.map((m) => `@${m.payload}`),
-      aiText.trim(),
+      text.trim(),
     ].filter(Boolean);
-    sendAIPrompt(parts.join(" "));
-    setAiMentions([]);
-    setAiText("");
+    // flushSync forces React to paint the loading state before the async call starts,
+    // preventing React 18 automatic batching from collapsing setIsAILoading(true/false) into one render.
+    flushSync(() => {
+      setAiMentions([]);
+      setAiResponse(null);
+      setAiConfirmation(null);
+      setIsAILoading(true);
+    });
+    try {
+      const result = await sendAIPrompt(parts.join(" "));
+      setAiResponse(result.message ?? "La IA no devolvió una respuesta.");
+      if (result.pendingConfirmation) {
+        setAiConfirmation(result.pendingConfirmation);
+      } else {
+        setTimeout(() => setAiResponse(null), 8000);
+      }
+    } catch {
+      showError("🚫 Error al contactar la IA. Verifica que el servidor esté activo.");
+    } finally {
+      setIsAILoading(false);
+      await fetchData(true);
+    }
+  };
+
+  const handleAIConfirm = async (id: string, approved: boolean) => {
+    setAiConfirmation(null);
+    flushSync(() => setIsAILoading(true));
+    try {
+      const message = await confirmAIAction(id, approved);
+      setAiResponse(message ?? (approved ? "Eliminación realizada." : "Operación cancelada."));
+      setTimeout(() => setAiResponse(null), 6000);
+    } catch {
+      showError("🚫 Error al confirmar la acción.");
+    } finally {
+      setIsAILoading(false);
+      await fetchData(true);
+    }
   };
 
   const handleSidePanelClick = (type: string, value: string) => {
@@ -411,7 +458,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#dfdfdf] dark:bg-background flex flex-col relative transition-colors duration-300">
+    <div className="min-h-screen xl:h-dvh xl:overflow-hidden bg-[#dfdfdf] dark:bg-background flex flex-col relative transition-colors duration-300">
       <Navbar role="admin" />
 
       {/* Custom Error Pop-up / Toast */}
@@ -424,7 +471,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
+      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} sensors={sensors}>
         <main className="flex-1 flex flex-col xl:flex-row gap-8 px-4 md:px-10 pt-24 lg:pt-4 pb-32 lg:pb-24 max-w-[1600px] w-full mx-auto">
           {/* Lado Izquierdo: Calendario */}
           <div className="flex-1 min-w-0">
@@ -500,7 +547,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Grid del Timeline */}
-              <div>
+              <div className="flex-1 overflow-auto">
                 <div className="min-w-[700px] relative ">
                   {/* Header de Horas Dinámico con Color */}
                   <div
@@ -537,7 +584,7 @@ export default function AdminDashboard() {
                         {timeSlots.map((slot, idx) => (
                           <CreateTaskModal
                             key={`modal-${emp}-${idx}`}
-                            onSave={(data) => {
+                            onSave={async (data) => {
                               const dateToUse = calendarView === "7_days" ? (slot.value as string) : currentDate.toDateString();
                               const hourToUse = calendarView === "7_days" ? 9 : (slot.value as number);
                               const slotDuration = calendarView === "minutes" ? 0.25 : 1;
@@ -552,7 +599,8 @@ export default function AdminDashboard() {
                                 showError(`🚫 El horario ya está ocupado para ${emp}.`);
                                 return;
                               }
-                              addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description || "", startHour: hourToUse, duration: slotDuration, color: "bg-teal-500", dateStr: dateToUse });
+                              const result = await addTask({ id: Date.now(), employee: emp, title: data.title, description: data.description || "", startHour: hourToUse, duration: slotDuration, color: "bg-teal-500", dateStr: dateToUse });
+                              if (!result.ok) showError(`🚫 No se pudo guardar la tarea: ${result.error}`);
                             }}
                           >
                             <DroppableCell id={`cell-${emp}-${slot.value}`}>
@@ -679,10 +727,33 @@ export default function AdminDashboard() {
         <BottomAIBar
           mentions={aiMentions}
           onRemoveMention={(idx) => setAiMentions((prev) => prev.filter((_, i) => i !== idx))}
-          text={aiText}
-          onTextChange={setAiText}
           onSend={handleSendPrompt}
+          isLoading={isAILoading}
+          aiResponse={aiResponse}
+          pendingConfirmation={aiConfirmation}
+          onConfirm={handleAIConfirm}
         />
+
+        <DragOverlay
+          dropAnimation={null}
+          modifiers={[
+            ({ transform, activatorEvent, draggingNodeRect }) => {
+              if (!activatorEvent || !draggingNodeRect) return transform;
+              const { clientX, clientY } = activatorEvent as PointerEvent;
+              return {
+                ...transform,
+                x: transform.x + draggingNodeRect.width / 2 - (clientX - draggingNodeRect.left),
+                y: transform.y + draggingNodeRect.height / 2 - (clientY - draggingNodeRect.top),
+              };
+            },
+          ]}
+        >
+          {activeOverlay ? (
+            <div className="px-4 py-2 rounded-md text-sm font-medium text-white bg-gray-700 shadow-xl opacity-95 cursor-grabbing select-none">
+              {activeOverlay.value}
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </div>
   );
