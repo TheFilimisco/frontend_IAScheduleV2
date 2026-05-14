@@ -22,7 +22,8 @@ interface DashboardState {
   schedules: string[];
   professionsList: Profession[];   // full objects → feeds dropdowns
   departmentsList: Department[];   // full objects → feeds dropdowns
-  employeesFullList: Employee[];   // full objects → feeds assignee dropdowns
+  employeesFullList: Employee[];   // active only → feeds assignee dropdowns & schedule
+  employeesAllList: Employee[];    // all employees (active first) → feeds /management page
   history: HistoryLog[];
   isLoading: boolean;
   error: string | null;
@@ -38,13 +39,13 @@ interface DashboardState {
 
   // Departments
   addDepartment: (dept: any) => void;
-  updateDepartment: (oldName: string, newName: string) => void;
-  deleteDepartment: (name: string) => void;
+  updateDepartment: (oldName: string, updates: { name?: string; color?: string; description?: string; managerId?: string }) => void;
+  deleteDepartment: (name: string) => Promise<{ ok: boolean; error?: string }>;
 
   // Employees
   addEmployee: (emp: any) => void;
   updateEmployee: (empId: string, updates: any) => void;
-  deleteEmployee: (empId: string) => void;
+  deleteEmployee: (empId: string) => Promise<{ ok: boolean; error?: string }>;
   
   // AI
   sendAIPrompt: (prompt: string) => void;
@@ -104,17 +105,64 @@ const MOCK_EMPLOYEES_FULL: Employee[] = [
   { id: 'mock-emp-6', code: 'EMP-MATO-006', firstName: 'María',   lastName: 'Torres',  departmentId: 'mock-dept-3', role: 'manager',  status: 'active' },
 ];
 
+function mapApiTaskToFrontend(apiTask: any): Task {
+  const emp = apiTask.assigneeId;
+  const employeeName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : "";
+  
+  let startHour = 9;
+  let dateStr = new Date().toDateString();
+  
+  if (apiTask.startDate) {
+    const d = new Date(apiTask.startDate);
+    startHour = d.getHours() + (d.getMinutes() / 60);
+    dateStr = d.toDateString();
+  }
+
+  const duration = apiTask.durationMinutes ? apiTask.durationMinutes / 60 : 1;
+  const deptColor = apiTask.departmentId?.color || "#3b82f6"; // Default or mapped color
+
+  return {
+    id: apiTask.id || apiTask._id,
+    employee: employeeName,
+    title: apiTask.title,
+    description: apiTask.description || "",
+    startHour,
+    duration,
+    color: deptColor,
+    dateStr,
+    priority: apiTask.priority
+  };
+}
+
+function mapFrontendTaskToApi(task: Task, employeesFullList: Employee[]) {
+  const emp = employeesFullList.find(e => e.firstName === task.employee || `${e.firstName} ${e.lastName}` === task.employee);
+  
+  const d = new Date(task.dateStr);
+  d.setHours(Math.floor(task.startHour));
+  d.setMinutes(Math.round((task.startHour % 1) * 60));
+
+  return {
+    title: task.title,
+    description: task.description,
+    assigneeId: emp ? emp.id : undefined,
+    startDate: d.toISOString(),
+    durationMinutes: Math.round(task.duration * 60),
+    departmentId: emp ? (typeof emp.departmentId === 'object' && emp.departmentId ? emp.departmentId.id : emp.departmentId) : undefined,
+  };
+}
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   tasksData: [],
   employeesList: [],
   adminSections: [],
   employeesByDept: {},
-  departments: ["Design", "Marketing", "Call Center"],
+  departments: [],
   professions: [],
   schedules: [],
   professionsList: [],
   departmentsList: [],
   employeesFullList: [],
+  employeesAllList: [],
   history: [],
   isLoading: true,
   error: null,
@@ -135,27 +183,35 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       if (process.env.NEXT_PUBLIC_USE_API === "true") {
-        const [tasksRes, sectionsRes, employeesByDeptRes, profRes, schedRes, profListRes, deptListRes, empListRes] = await Promise.all([
-          fetch(api('/api/tasks')).then(res => res.ok ? res.json() : MOCK_TASKS),
-          fetch(api('/api/sections')).then(res => res.ok ? res.json() : MOCK_ADMIN_SECTIONS),
-          fetch(api('/api/employees-by-dept')).then(res => res.ok ? res.json() : MOCK_EMPLOYEES_BY_DEPT),
-          fetch(api('/api/professions')).then(res => res.ok ? res.json() : MOCK_PROFESSIONS),
-          fetch(api('/api/schedules')).then(res => res.ok ? res.json() : MOCK_SCHEDULES),
-          fetch(api('/api/professions?full=1')).then(res => res.ok ? res.json() : MOCK_PROFESSIONS_LIST),
-          fetch(api('/api/departments')).then(res => res.ok ? res.json() : MOCK_DEPARTMENTS_LIST),
-          fetch(api('/api/employees')).then(res => res.ok ? res.json() : MOCK_EMPLOYEES_FULL),
+        const [tasksRes, sectionsRes, employeesByDeptRes, profRes, schedRes, profListRes, deptListRes, empListRes, empAllRes] = await Promise.all([
+          fetch(api('/api/tasks')).then(res => res.ok ? res.json().then(data => data.tasks ? data.tasks.map(mapApiTaskToFrontend) : []) : []).catch(() => []),
+          fetch(api('/api/schedule/sections')).then(res => res.ok ? res.json() : []).catch(() => []),
+          fetch(api('/api/schedule/employees-by-dept')).then(res => res.ok ? res.json() : {}).catch(() => ({})),
+          fetch(api('/api/professions')).then(res => res.ok ? res.json().then(data => data.professions?.map((p: any) => p.name) || []) : []).catch(() => []),
+          fetch(api('/api/schedule/enums')).then(res => res.ok ? res.json().then(data => data.schedules || []) : []).catch(() => []),
+          fetch(api('/api/professions?full=1')).then(res => res.ok ? res.json().then(data => data.professions || []) : []).catch(() => []),
+          fetch(api('/api/departments')).then(res => res.ok ? res.json().then(data => data.departments || []) : []).catch(() => []),
+          // Active-only employees → for schedule/dropdowns
+          fetch(api('/api/employees?status=active')).then(res => res.ok ? res.json().then(data => data.employees || []) : []).catch(() => []),
+          // All employees sorted active-first → for /management page
+          fetch(api('/api/employees')).then(res => res.ok ? res.json().then(data => {
+            const all: any[] = data.employees || [];
+            return [...all.filter(e => e.status === 'active'), ...all.filter(e => e.status !== 'active')];
+          }) : []).catch(() => []),
         ]);
         
         set({ 
-          tasksData: Array.isArray(tasksRes) ? tasksRes : MOCK_TASKS, 
-          adminSections: Array.isArray(sectionsRes) ? sectionsRes : MOCK_ADMIN_SECTIONS, 
-          employeesByDept: employeesByDeptRes || MOCK_EMPLOYEES_BY_DEPT,
-          professions: Array.isArray(profRes) ? profRes : MOCK_PROFESSIONS,
-          schedules: Array.isArray(schedRes) ? schedRes : MOCK_SCHEDULES,
-          professionsList: Array.isArray(profListRes) ? profListRes : MOCK_PROFESSIONS_LIST,
-          departmentsList: Array.isArray(deptListRes) ? deptListRes : MOCK_DEPARTMENTS_LIST,
-          employeesFullList: Array.isArray(empListRes) ? empListRes : MOCK_EMPLOYEES_FULL,
-          employeesList: (employeesByDeptRes && employeesByDeptRes["Design"]) || MOCK_EMPLOYEES_BY_DEPT["Design"] || [],
+          tasksData: Array.isArray(tasksRes) ? tasksRes : [], 
+          adminSections: Array.isArray(sectionsRes) ? sectionsRes : [], 
+          employeesByDept: employeesByDeptRes || {},
+          professions: Array.isArray(profRes) ? profRes : [],
+          schedules: Array.isArray(schedRes) ? schedRes : [],
+          professionsList: Array.isArray(profListRes) ? profListRes : [],
+          departmentsList: Array.isArray(deptListRes) ? deptListRes : [],
+          departments: Array.isArray(deptListRes) ? deptListRes.map((d: any) => d.name) : [],
+          employeesFullList: Array.isArray(empListRes) ? empListRes : [],
+          employeesAllList: Array.isArray(empAllRes) ? empAllRes : [],
+          employeesList: Array.isArray(empListRes) ? empListRes.map((e: any) => `${e.firstName} ${e.lastName}`.trim()) : [],
           isLoading: false 
         });
         get().addLog('FETCH', 'SYSTEM', 'Data successfully fetched from API.');
@@ -176,20 +232,37 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       }
     } catch (error: any) {
       console.error("Error fetching data:", error);
-      set({ 
-        tasksData: MOCK_TASKS, 
-        adminSections: MOCK_ADMIN_SECTIONS, 
-        employeesByDept: MOCK_EMPLOYEES_BY_DEPT,
-        professions: MOCK_PROFESSIONS,
-        schedules: MOCK_SCHEDULES,
-        professionsList: MOCK_PROFESSIONS_LIST,
-        departmentsList: MOCK_DEPARTMENTS_LIST,
-        employeesFullList: MOCK_EMPLOYEES_FULL,
-        employeesList: MOCK_EMPLOYEES_BY_DEPT["Design"] || [],
-        isLoading: false,
-        error: error.message
-      });
-      get().addLog('FETCH', 'SYSTEM', 'Error loading data, using mock data fallback.');
+      if (process.env.NEXT_PUBLIC_USE_API === "true") {
+        set({ 
+          tasksData: [], 
+          adminSections: [], 
+          employeesByDept: {},
+          professions: [],
+          schedules: [],
+          professionsList: [],
+          departmentsList: [],
+          employeesFullList: [],
+          employeesList: [],
+          isLoading: false,
+          error: error.message
+        });
+        get().addLog('FETCH', 'SYSTEM', 'Error loading data, setting empty state.');
+      } else {
+        set({ 
+          tasksData: MOCK_TASKS, 
+          adminSections: MOCK_ADMIN_SECTIONS, 
+          employeesByDept: MOCK_EMPLOYEES_BY_DEPT,
+          professions: MOCK_PROFESSIONS,
+          schedules: MOCK_SCHEDULES,
+          professionsList: MOCK_PROFESSIONS_LIST,
+          departmentsList: MOCK_DEPARTMENTS_LIST,
+          employeesFullList: MOCK_EMPLOYEES_FULL,
+          employeesList: MOCK_EMPLOYEES_BY_DEPT["Design"] || [],
+          isLoading: false,
+          error: error.message
+        });
+        get().addLog('FETCH', 'SYSTEM', 'Error loading data, using mock data fallback.');
+      }
     }
   },
 
@@ -200,67 +273,271 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
   },
 
-  addTask: (task) => {
-    const apiPayload = { method: 'POST', endpoint: api('/api/tasks'), body: task };
+  addTask: async (task) => {
+    const apiTask = mapFrontendTaskToApi(task, get().employeesFullList);
+    const apiPayload = { method: 'POST', endpoint: api('/api/tasks'), body: apiTask };
     get().addLog('CREATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
-    set((state) => ({ tasksData: [...state.tasksData, task] }));
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api('/api/tasks'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiTask)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // API always returns populated task
+          set((state) => ({ tasksData: [...state.tasksData, mapApiTaskToFrontend(data.task || apiTask)] }));
+        }
+      } catch (err) { console.error("Error creating task", err); }
+    } else {
+      set((state) => ({ tasksData: [...state.tasksData, task] }));
+    }
   },
 
-  updateTask: (taskId, updates) => {
-    const apiPayload = { method: 'PUT', endpoint: api(`/api/tasks/${taskId}`), body: updates };
+  updateTask: async (taskId, updates) => {
+    const apiUpdates: any = {};
+    if (updates.title !== undefined) apiUpdates.title = updates.title;
+    if (updates.description !== undefined) apiUpdates.description = updates.description;
+    if (updates.duration !== undefined) apiUpdates.durationMinutes = Math.round(updates.duration * 60);
+    if (updates.employee !== undefined) {
+      const emp = get().employeesFullList.find(e => e.firstName === updates.employee || `${e.firstName} ${e.lastName}` === updates.employee);
+      apiUpdates.assigneeId = emp ? emp.id : null;
+    }
+    if (updates.startHour !== undefined || updates.dateStr !== undefined) {
+      const existingTask = get().tasksData.find(t => t.id === taskId);
+      if (existingTask) {
+        const d = new Date(updates.dateStr || existingTask.dateStr);
+        const h = updates.startHour !== undefined ? updates.startHour : existingTask.startHour;
+        d.setHours(Math.floor(h));
+        d.setMinutes(Math.round((h % 1) * 60));
+        apiUpdates.startDate = d.toISOString();
+      }
+    }
+
+    const apiPayload = { method: 'PUT', endpoint: api(`/api/tasks/${taskId}`), body: apiUpdates };
     get().addLog('UPDATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
-    set((state) => ({
-      tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t)
-    }));
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api(`/api/tasks/${taskId}`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiUpdates)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          set((state) => ({
+            tasksData: state.tasksData.map(t => t.id === taskId ? mapApiTaskToFrontend(data.task) : t)
+          }));
+        }
+      } catch (err) { console.error("Error updating task", err); }
+    } else {
+      set((state) => ({
+        tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t)
+      }));
+    }
   },
 
-  deleteTask: (taskId) => {
+  deleteTask: async (taskId) => {
     const apiPayload = { method: 'DELETE', endpoint: api(`/api/tasks/${taskId}`) };
     get().addLog('DELETE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
-    set((state) => ({
-      tasksData: state.tasksData.filter(t => t.id !== taskId)
-    }));
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api(`/api/tasks/${taskId}`), { method: 'DELETE' });
+        if (res.ok) {
+          set((state) => ({
+            tasksData: state.tasksData.filter(t => t.id !== taskId)
+          }));
+        } else {
+          console.error("Failed to delete task:", await res.json());
+        }
+      } catch (err) { console.error("Error deleting task", err); }
+    } else {
+      set((state) => ({
+        tasksData: state.tasksData.filter(t => t.id !== taskId)
+      }));
+    }
   },
 
-  addDepartment: (dept) => {
+  addDepartment: async (dept) => {
     const apiPayload = { method: 'POST', endpoint: api('/api/departments'), body: dept };
     get().addLog('CREATE', 'DEPARTMENT', `API Request: ${JSON.stringify(apiPayload)}`);
-    set((state) => ({ departments: [...state.departments, dept.name] }));
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api('/api/departments'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dept)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          set((state) => ({ 
+            departments: [...state.departments, data.department.name],
+            departmentsList: [...state.departmentsList, data.department]
+          }));
+        }
+      } catch (e) {}
+    } else {
+      set((state) => ({ departments: [...state.departments, dept.name] }));
+    }
   },
 
-  updateDepartment: (oldName, newName) => {
-    const apiPayload = { method: 'PUT', endpoint: api(`/api/departments/${oldName}`), body: { name: newName } };
+  updateDepartment: async (oldName, updates) => {
+    const dept = get().departmentsList.find(d => d.name === oldName);
+    const id = dept ? (dept.id || (dept as any)._id) : oldName;
+    const newName = updates.name ?? oldName;
+    const apiPayload = { method: 'PUT', endpoint: api(`/api/departments/${id}`), body: updates };
     get().addLog('UPDATE', 'DEPARTMENT', `API Request: ${JSON.stringify(apiPayload)}`);
-    set((state) => ({
-      departments: state.departments.map(d => d === oldName ? newName : d)
-    }));
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api(`/api/departments/${id}`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const updated = data.department;
+          set((state) => ({ 
+            departments: state.departments.map(d => d === oldName ? (updated.name || newName) : d),
+            departmentsList: state.departmentsList.map(d => d.name === oldName ? { ...d, ...updated } : d)
+          }));
+        }
+      } catch (e) {}
+    } else {
+      set((state) => ({ departments: state.departments.map(d => d === oldName ? newName : d) }));
+    }
   },
 
-  deleteDepartment: (name) => {
-    const apiPayload = { method: 'DELETE', endpoint: api(`/api/departments/${name}`) };
+  deleteDepartment: async (name) => {
+    const dept = get().departmentsList.find(d => d.name === name);
+    const id = dept ? (dept.id || (dept as any)._id) : name;
+    const apiPayload = { method: 'DELETE', endpoint: api(`/api/departments/${id}`) };
     get().addLog('DELETE', 'DEPARTMENT', `API Request: ${JSON.stringify(apiPayload)}`);
-    set((state) => ({ departments: state.departments.filter(d => d !== name) }));
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api(`/api/departments/${id}`), { method: 'DELETE' });
+        if (res.ok) {
+          set((state) => ({ 
+            departments: state.departments.filter(d => d !== name),
+            departmentsList: state.departmentsList.filter(d => d.name !== name)
+          }));
+          return { ok: true };
+        } else {
+          const data = await res.json();
+          return { ok: false, error: data.message || data.error || 'Error al eliminar departamento' };
+        }
+      } catch (e) {
+        return { ok: false, error: 'Error de conexión' };
+      }
+    } else {
+      set((state) => ({ departments: state.departments.filter(d => d !== name) }));
+      return { ok: true };
+    }
   },
 
-  addEmployee: (emp) => {
+  addEmployee: async (emp) => {
     const apiPayload = { method: 'POST', endpoint: api('/api/employees'), body: emp };
     get().addLog('CREATE', 'EMPLOYEE', `API Request: ${JSON.stringify(apiPayload)}`);
-    // Dependiendo de tu logica real, quiza debas insertarlo en employeesByDept
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api('/api/employees'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emp)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const newEmp = data.employee;
+          set((state) => ({
+            employeesList: [...state.employeesList, newEmp.firstName],
+            employeesFullList: [...state.employeesFullList, newEmp],
+            // Active employees go at the front of the management list
+            employeesAllList: [newEmp, ...state.employeesAllList],
+          }));
+        }
+      } catch (e) {}
+    } else {
+      set((state) => ({ employeesList: [...state.employeesList, emp.firstName || emp.name] }));
+    }
   },
 
-  updateEmployee: (empId, updates) => {
-    const apiPayload = { method: 'PUT', endpoint: api(`/api/employees/${empId}`), body: updates };
+  updateEmployee: async (empName, updates) => {
+    // Search in ALL employees (including inactive ones from /management)
+    const allEmps = get().employeesAllList.length > 0 ? get().employeesAllList : get().employeesFullList;
+    const employee = allEmps.find(e => `${e.firstName} ${e.lastName}`.trim() === empName || e.firstName === empName);
+    const id = employee ? (employee.id || (employee as any)._id) : empName;
+    const apiPayload = { method: 'PUT', endpoint: api(`/api/employees/${id}`), body: updates };
     get().addLog('UPDATE', 'EMPLOYEE', `API Request: ${JSON.stringify(apiPayload)}`);
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api(`/api/employees/${id}`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          set((state) => ({
+            employeesFullList: state.employeesFullList.map(e => (e.id || (e as any)._id) === id ? { ...e, ...data.employee } : e),
+            employeesAllList: state.employeesAllList.map(e => (e.id || (e as any)._id) === id ? { ...e, ...data.employee } : e),
+          }));
+        }
+      } catch (e) {}
+    } else {
+      set((state) => ({ employeesList: state.employeesList.map(e => e === empName ? (updates.firstName || empName) : e) }));
+    }
   },
 
-  deleteEmployee: (empId) => {
-    const apiPayload = { method: 'DELETE', endpoint: api(`/api/employees/${empId}`) };
+  deleteEmployee: async (empName) => {
+    // Search in ALL employees (including inactive ones from /management)
+    const allEmps = get().employeesAllList.length > 0 ? get().employeesAllList : get().employeesFullList;
+    const employee = allEmps.find(e => `${e.firstName} ${e.lastName}`.trim() === empName || e.firstName === empName);
+    const id = employee ? (employee.id || (employee as any)._id) : null;
+    if (!id) {
+      return { ok: false, error: `Empleado "${empName}" no encontrado en el store` };
+    }
+    const apiPayload = { method: 'DELETE', endpoint: api(`/api/employees/${id}`) };
     get().addLog('DELETE', 'EMPLOYEE', `API Request: ${JSON.stringify(apiPayload)}`);
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api(`/api/employees/${id}`), { method: 'DELETE' });
+        if (res.ok) {
+          set((state) => ({
+            employeesList: state.employeesList.filter(e => e !== empName),
+            employeesFullList: state.employeesFullList.filter(e => (e.id || (e as any)._id) !== id),
+            employeesAllList: state.employeesAllList.filter(e => (e.id || (e as any)._id) !== id),
+          }));
+          return { ok: true };
+        } else {
+          const data = await res.json();
+          return { ok: false, error: data.error || data.message || 'Error al eliminar empleado' };
+        }
+      } catch (e) {
+        return { ok: false, error: 'Error de conexión' };
+      }
+    } else {
+      set((state) => ({ employeesList: state.employeesList.filter(e => e !== empName) }));
+      return { ok: true };
+    }
   },
 
-  sendAIPrompt: (prompt) => {
-    const apiPayload = { method: 'POST', endpoint: api('/api/ai/chat'), body: { prompt } };
+  sendAIPrompt: async (prompt) => {
+    const apiPayload = { method: 'POST', endpoint: api('/api/ia/schedule'), body: { prompt } };
     get().addLog('CREATE', 'SYSTEM', `API Request (AI): ${JSON.stringify(apiPayload)}`);
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api('/api/ia/schedule'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          get().addLog('CREATE', 'SYSTEM', `AI Response: ${data.message}`);
+        }
+      } catch (e) {}
+    }
   },
 
   setEmployeesList: (updater) => {

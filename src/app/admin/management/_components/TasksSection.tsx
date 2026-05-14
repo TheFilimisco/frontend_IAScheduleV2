@@ -85,16 +85,19 @@ export function TasksSection({
         {/* Body */}
         <div className="bg-[#999999] p-6 min-h-[320px] flex flex-row flex-wrap gap-3 content-start">
           {filtered.length > 0 ? (
-            filtered.map((task, idx) => (
-              <DraggableItem key={idx} id={`drag-T-${task.title}-${idx}`} data={{ type: "Tasks", value: task.title }}>
-                <CreateTaskModal initialData={{ title: task.title }} onSave={d => onUpdate(task.title, d)}>
-                  <ManagementPill
-                    label={task.title}
-                    onDelete={e => onDelete(e, task.title)}
-                  />
-                </CreateTaskModal>
-              </DraggableItem>
-            ))
+            filtered.map((task, idx) => {
+              const uniqueKey = (task as any).id || `task-${task.title}-${idx}`;
+              return (
+                <DraggableItem key={uniqueKey} id={`drag-T-${task.title}`} data={{ type: "Tasks", value: task.title }}>
+                  <CreateTaskModal initialData={{ title: task.title }} onSave={d => onUpdate(task.title, d)}>
+                    <ManagementPill
+                      label={task.title}
+                      onDelete={e => onDelete(e, task.title)}
+                    />
+                  </CreateTaskModal>
+                </DraggableItem>
+              );
+            })
           ) : (
             <div className="text-[#444444] text-sm font-medium text-center mt-4 select-none">
               No tasks for {formatDateLabel(selectedDay)}

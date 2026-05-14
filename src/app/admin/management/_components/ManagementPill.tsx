@@ -15,7 +15,8 @@ export const ManagementPill = forwardRef<HTMLDivElement, ManagementPillProps>(
     const [confirmOpen, setConfirmOpen] = useState(false);
 
     const handleDeleteClick = (e: React.MouseEvent) => {
-      e.stopPropagation(); // evita que se abra el modal de edición
+      e.preventDefault();
+      e.stopPropagation();
       setConfirmOpen(true);
     };
 
@@ -25,7 +26,6 @@ export const ManagementPill = forwardRef<HTMLDivElement, ManagementPillProps>(
     };
 
     return (
-      // Div raíz único → el DialogTrigger puede añadirle onClick sin problema
       <div
         ref={ref}
         onClick={onClick}
@@ -38,13 +38,12 @@ export const ManagementPill = forwardRef<HTMLDivElement, ManagementPillProps>(
         <button
           type="button"
           onClick={handleDeleteClick}
-          onPointerDown={(e) => e.stopPropagation()} // impide que dnd-kit inicie el drag
+          onPointerDown={(e) => e.stopPropagation()}
           className="text-gray-400 hover:text-red-400 bg-transparent border border-gray-500 rounded-full p-0.5 ml-4 transition-colors"
         >
           <X size={14} />
         </button>
 
-        {/* El modal usa fixed → se escapa del flujo del div sin romper el DialogTrigger */}
         <ConfirmDeleteModal
           label={label}
           isOpen={confirmOpen}

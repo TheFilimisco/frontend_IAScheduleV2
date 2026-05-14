@@ -16,12 +16,14 @@ export function ConfirmDeleteModal({ label, isOpen, onConfirm, onCancel }: Confi
     // Backdrop
     <div
       className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onMouseDown={(e) => { e.stopPropagation(); onCancel(); }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onCancel(); }}
     >
       {/* Panel */}
       <div
         className="bg-[#1a1a1a] border border-gray-700 rounded-2xl shadow-2xl p-6 w-[360px] flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-150"
-        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3">

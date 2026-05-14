@@ -32,8 +32,8 @@ export default function AdminDashboard() {
   // Tarea seleccionada para ver/editar en el modal
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
 
-  // Estado de Departamento Actual
-  const [currentDepartment, setCurrentDepartment] = useState("Design");
+  // Estado de Departamento Actual ('All' = todos los empleados)
+  const [currentDepartment, setCurrentDepartment] = useState("All");
 
   const {
     tasksData,
@@ -57,12 +57,12 @@ export default function AdminDashboard() {
     fetchData();
   }, [fetchData]);
 
-  // Color predefinido por departamento (hex)
-  const deptColorMap: Record<string, string> = {
-    "Design": "#2563eb", // blue-600
-    "Marketing": "#db2777", // pink-600
-    "Call Center": "#ea580c", // orange-600
-  };
+  // Color por departamento derivado de la base de datos
+  const deptColorMap: Record<string, string> = useMemo(() => {
+    const map: Record<string, string> = {};
+    departmentsList.forEach(d => { map[d.name] = d.color ?? "#374151"; });
+    return map;
+  }, [departmentsList]);
 
   // Utilidad: color del departamento al que pertenece un empleado
   const getEmployeeDeptColor = (emp: string): string => {
@@ -276,7 +276,7 @@ export default function AdminDashboard() {
 
         // Validación: Empleado no puede estar en más de un departamento
         const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(value));
-        if (currentDepartment && currentDepartment !== "Todos" && dept && dept !== currentDepartment) {
+        if (currentDepartment && currentDepartment !== "All" && dept && dept !== currentDepartment) {
           showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
           return;
         }
@@ -324,7 +324,7 @@ export default function AdminDashboard() {
     if (type === "Departaments") {
       if (!value) {
         // Clear filter -> show all
-        setCurrentDepartment("Todos");
+        setCurrentDepartment("All");
         const allEmployees = Object.values(employeesByDept).flat();
         setEmployeesList(allEmployees);
       } else {
@@ -335,7 +335,7 @@ export default function AdminDashboard() {
 
       // Validación: Empleado no puede estar en más de un departamento
       const dept = Object.keys(employeesByDept).find(k => employeesByDept[k].includes(value));
-      if (currentDepartment && currentDepartment !== "Todos" && dept && dept !== currentDepartment) {
+      if (currentDepartment && currentDepartment !== "All" && dept && dept !== currentDepartment) {
         showError(`❌ Bloqueado: El empleado ${value} pertenece a ${dept}. No puedes mezclarlo en la vista del departamento ${currentDepartment}.`);
         return;
       }
@@ -485,9 +485,9 @@ export default function AdminDashboard() {
                 {/* Placa Decorativa del Departamento con Colores Dinámicos */}
                 <div
                   className="px-6 py-2 rounded-lg font-bold shadow-md tracking-wide text-white transition-colors text-sm md:text-base w-full md:w-auto text-center"
-                  style={{ backgroundColor: deptColorMap[currentDepartment] ?? "#1f2937" }}
+                  style={{ backgroundColor: currentDepartment === "All" ? "#4b5563" : (deptColorMap[currentDepartment] ?? "#1f2937") }}
                 >
-                  {currentDepartment}
+                  {currentDepartment === "All" ? "All Departments" : currentDepartment}
                 </div>
 
               </div>
@@ -505,7 +505,7 @@ export default function AdminDashboard() {
                   {/* Header de Horas Dinámico con Color */}
                   <div
                     className="flex border-b  border-gray-200 sticky top-0 z-30 transition-colors backdrop-blur-md"
-                    style={{ backgroundColor: (deptColorMap[currentDepartment] ?? "#6b7280") + "14" }}
+                    style={{ backgroundColor: (currentDepartment === "All" ? "#6b7280" : (deptColorMap[currentDepartment] ?? "#6b7280")) + "14" }}
                   >
                     <div className="w-28 shrink-0 p-3 border-r border-gray-200 font-bold text-gray-700 text-sm flex items-center sticky left-0 z-40 bg-white dark:bg-[#222222] dark:text-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                       Employees
@@ -615,7 +615,9 @@ export default function AdminDashboard() {
                               >
                                 <span className="font-semibold text-xs tracking-wide truncate px-1 flex-1">{task.title}</span>
                                 <button
+                                  onPointerDown={(e) => e.stopPropagation()}
                                   onClick={(e) => {
+                                    e.preventDefault();
                                     e.stopPropagation();
                                     deleteTask(task.id);
                                   }}

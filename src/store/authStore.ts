@@ -29,7 +29,8 @@ async function fetchLinkedEmployee(employeeId: string, token: string): Promise<E
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
-    return await res.json();
+    const data = await res.json();
+    return data.employee || data;
   } catch {
     return null;
   }

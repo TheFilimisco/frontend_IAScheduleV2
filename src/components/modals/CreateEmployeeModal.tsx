@@ -252,7 +252,13 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
                 onValueChange={(val) => set("professionId", val)}
               >
                 <SelectTrigger className="bg-[#333333] border-none text-white w-full">
-                  <SelectValue placeholder="Select profession" />
+                  <SelectValue placeholder="Select profession">
+                    {(value) => {
+                      if (!value) return "Select profession";
+                      const prof = professionsList.find((p) => p.id === value);
+                      return prof ? prof.name : "Select profession";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className={selectContentCls} alignItemWithTrigger={false} side="bottom">
                   {professionsList.length === 0 ? (
@@ -275,7 +281,22 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
                 onValueChange={(val) => set("departmentId", val)}
               >
                 <SelectTrigger className="bg-[#333333] border-none text-white w-full">
-                  <SelectValue placeholder="Select department" />
+                  <SelectValue placeholder="Select department">
+                    {(value) => {
+                      if (!value) return "Select department";
+                      const dept = departmentsList.find((d) => d.id === value);
+                      if (!dept) return "Select department";
+                      return (
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: dept.color }}
+                          />
+                          {dept.name}
+                        </span>
+                      );
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className={selectContentCls} alignItemWithTrigger={false} side="bottom">
                   {departmentsList.length === 0 ? (

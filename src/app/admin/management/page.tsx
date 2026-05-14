@@ -13,25 +13,19 @@ import { ManagementSection, PlusButton } from "./_components/ManagementSection";
 import { ManagementPill } from "./_components/ManagementPill";
 import { TasksSection, TaskItem } from "./_components/TasksSection";
 
-// Colores por departamento
-const DEPT_COLORS: Record<string, string> = {
-  "Design": "#2563eb",
-  "Marketing": "#db2777",
-  "Call Center": "#ea580c",
-};
-
 const TODAY_STR = new Date().toDateString();
 
 export default function AdminManagement() {
   const [aiMentions, setAiMentions] = useState<AIMention[]>([]);
   const [aiText, setAiText] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const {
-    departments,
+    departmentsList,
     addDepartment: storeAddDepartment,
     updateDepartment: storeUpdateDepartment,
     deleteDepartment: storeDeleteDepartment,
-    employeesList: employees, // In real app, employeesByDept should probably be flattened
+    employeesAllList,           // all employees (active first) for management
     addEmployee: storeAddEmployee,
     updateEmployee: storeUpdateEmployee,
     deleteEmployee: storeDeleteEmployee,
@@ -42,6 +36,7 @@ export default function AdminManagement() {
     sendAIPrompt,
     fetchData
   } = useDashboardStore();
+
 
   const [selectedDay, setSelectedDay] = useState(TODAY_STR);
 
@@ -74,9 +69,10 @@ export default function AdminManagement() {
     const n = d.firstName || d.name;
     if (n) storeUpdateEmployee(old, d);
   };
-  const deleteEmployee = (e: React.MouseEvent, item: string) => {
+  const deleteEmployee = async (e: React.MouseEvent, item: string) => {
     e.stopPropagation();
-    storeDeleteEmployee(item);
+    const result = await storeDeleteEmployee(item);
+    if (!result.ok) setErrorMsg(result.error || "No se pudo eliminar el empleado");
   };
 
   // --- Departments CRUD ---
@@ -84,24 +80,28 @@ export default function AdminManagement() {
     if (d.name) storeAddDepartment(d);
   };
   const updateDepartment = (old: string, d: any) => {
-    if (d.name) storeUpdateDepartment(old, d.name);
+    if (d.name) storeUpdateDepartment(old, d);
   };
-  const deleteDepartment = (e: React.MouseEvent, item: string) => {
+  const deleteDepartment = async (e: React.MouseEvent, item: string) => {
     e.stopPropagation();
-    storeDeleteDepartment(item);
+    const result = await storeDeleteDepartment(item);
+    if (!result.ok) setErrorMsg(result.error || "No se pudo eliminar el departamento");
   };
 
   // --- Tasks CRUD ---
   const createTask = (d: any) => {
-    if (d.title) storeAddTask({ id: Date.now(), title: d.title, dateStr: selectedDay, employee: "", description: "", startHour: 9, duration: 1, color: "bg-blue-500" });
+    // Let the API/store assign the real id; pass minimal data
+    if (d.title) storeAddTask({ id: 0, title: d.title, dateStr: selectedDay, employee: "", description: d.description || "", startHour: 9, duration: 1, color: "bg-blue-500" });
   };
   const updateTask = (old: string, d: any) => {
-    const task = tasks.find(t => t.title === old && t.dateStr === selectedDay);
+    // Find by title only (dateStr may differ in timezone/format between API and local)
+    const task = tasks.find(t => t.title === old);
     if (d.title && task) storeUpdateTask(task.id, { title: d.title });
   };
   const deleteTask = (e: React.MouseEvent, title: string) => {
     e.stopPropagation();
-    const task = tasks.find(t => t.title === title && t.dateStr === selectedDay);
+    // Find by title only — dateStr format may differ between API and local
+    const task = tasks.find(t => t.title === title);
     if (task) storeDeleteTask(task.id);
   };
 
@@ -111,6 +111,14 @@ export default function AdminManagement() {
 
       <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
         <main className="flex-1 flex flex-col items-center gap-6 px-10  pt-24 lg:pt-4 pb-24 lg:pb-0 w-full">
+
+          {/* ── Error Banner ── */}
+          {errorMsg && (
+            <div className="w-full max-w-7xl flex items-center justify-between gap-3 bg-red-900/30 border border-red-700/50 text-red-300 text-sm font-medium px-5 py-3 rounded-xl">
+              <span>⚠️ {errorMsg}</span>
+              <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-200 transition-colors text-xs underline shrink-0">Cerrar</button>
+            </div>
+          )}
 
           {/* ── Tasks ── */}
           <TasksSection
@@ -131,13 +139,42 @@ export default function AdminManagement() {
               </CreateEmployeeModal>
             }
           >
-            {employees.map((item, idx) => (
-              <DraggableItem key={idx} id={`drag-E-${item}-${idx}`} data={{ type: "Employees", value: item }}>
-                <CreateEmployeeModal initialData={{ firstName: item }} onSave={d => updateEmployee(item, d)}>
-                  <ManagementPill label={item} onDelete={e => deleteEmployee(e, item)} />
-                </CreateEmployeeModal>
-              </DraggableItem>
-            ))}
+            {employeesAllList.map((emp) => {
+              const displayName = `${emp.firstName} ${emp.lastName}`.trim();
+              // Extract IDs from potentially populated refs
+              const deptId = emp.departmentId
+                ? (typeof emp.departmentId === "object" ? emp.departmentId.id : emp.departmentId)
+                : undefined;
+              const profId = emp.professionId
+                ? (typeof emp.professionId === "object" ? emp.professionId.id : emp.professionId)
+                : undefined;
+              const bday = emp.birthday
+                ? new Date(emp.birthday).toISOString().split("T")[0]
+                : undefined;
+
+              return (
+                <DraggableItem key={`emp-${emp.id}`} id={`drag-E-${displayName}`} data={{ type: "Employees", value: displayName }}>
+                  <CreateEmployeeModal
+                    initialData={{
+                      code: emp.code,
+                      firstName: emp.firstName,
+                      lastName: emp.lastName,
+                      email: emp.email ?? "",
+                      departmentId: deptId,
+                      professionId: profId,
+                      birthday: bday,
+                      schedule: emp.schedule,
+                      role: (emp.role as any) ?? "employee",
+                      managerId: emp.managerId,
+                      status: (emp.status as any) ?? "active",
+                    }}
+                    onSave={d => updateEmployee(displayName, d)}
+                  >
+                    <ManagementPill label={displayName} onDelete={e => deleteEmployee(e, displayName)} />
+                  </CreateEmployeeModal>
+                </DraggableItem>
+              );
+            })}
           </ManagementSection>
 
           {/* ── Departaments ── */}
@@ -149,13 +186,13 @@ export default function AdminManagement() {
               </CreateDepartmentModal>
             }
           >
-            {departments.map((item, idx) => (
-              <DraggableItem key={idx} id={`drag-D-${item}-${idx}`} data={{ type: "Departaments", value: item }}>
-                <CreateDepartmentModal initialData={{ name: item }} onSave={d => updateDepartment(item, d)}>
+            {departmentsList.map((dept) => (
+              <DraggableItem key={`dept-${dept.id}`} id={`drag-D-${dept.name}`} data={{ type: "Departaments", value: dept.name }}>
+                <CreateDepartmentModal initialData={{ name: dept.name, description: dept.description ?? "", color: dept.color }} onSave={d => updateDepartment(dept.name, d)}>
                   <ManagementPill
-                    label={item}
-                    onDelete={e => deleteDepartment(e, item)}
-                    borderColor={DEPT_COLORS[item] ?? "#6b7280"}
+                    label={dept.name}
+                    onDelete={e => deleteDepartment(e, dept.name)}
+                    borderColor={dept.color ?? "#6b7280"}
                   />
                 </CreateDepartmentModal>
               </DraggableItem>

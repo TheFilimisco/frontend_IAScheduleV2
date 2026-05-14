@@ -21,8 +21,13 @@ export type Employee = {
   code: string;          // Unique employee code, e.g. EMP-JODO-847
   firstName: string;
   lastName: string;
-  departmentId?: string;
+  email?: string;
+  professionId?: string | { id: string; name: string; [key: string]: any };
+  departmentId?: string | { id: string; name: string; color?: string; [key: string]: any };
+  birthday?: string;     // ISO date string
+  schedule?: 'morning' | 'early' | 'late' | 'night' | 'flexible';
   role?: string;
+  managerId?: string;
   status?: string;
 };
 
