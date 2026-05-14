@@ -25,7 +25,7 @@ export default function AdminDashboard() {
 
   // Estado de Fecha
   const [currentDate, setCurrentDate] = useState(new Date());
-  
+
   // Estado de Vista del Calendario
   const [calendarView, setCalendarView] = useState("hours");
 
@@ -91,8 +91,8 @@ export default function AdminDashboard() {
       for (let i = 0; i < 7; i++) {
         const d = new Date(startOfWeek);
         d.setDate(startOfWeek.getDate() + i);
-        slots.push({ 
-          label: d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }), 
+        slots.push({
+          label: d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
           value: d.toDateString(),
           type: 'day'
         });
@@ -100,8 +100,8 @@ export default function AdminDashboard() {
       return slots;
     }
     // Default: Hours or 1 Day
-    return [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => ({ 
-      label: `${h}:00`, 
+    return [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => ({
+      label: `${h}:00`,
       value: h,
       type: 'hour'
     }));
@@ -352,7 +352,7 @@ export default function AdminDashboard() {
       const startOfWeek = new Date(currentDate);
       startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
       const weekDays: string[] = [];
-      for(let i=0; i<7; i++) {
+      for (let i = 0; i < 7; i++) {
         const d = new Date(startOfWeek);
         d.setDate(startOfWeek.getDate() + i);
         weekDays.push(d.toDateString());
@@ -435,16 +435,16 @@ export default function AdminDashboard() {
 
                 {/* Navegación de Fechas y Selector de Vista */}
                 <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-center flex-wrap">
-                  
+
                   {/* Selector de Vista */}
                   <select
                     className="bg-white dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium shadow-sm transition-colors"
                     value={calendarView}
                     onChange={(e) => setCalendarView(e.target.value)}
                   >
-                    <option value="hours">Horas</option>
-                    <option value="minutes">Minutos</option>
-                    <option value="7_days">7 Días</option>
+                    <option value="hours">Hours</option>
+                    <option value="minutes">Minutes</option>
+                    <option value="7_days">7 Days</option>
                   </select>
 
                   <div className="flex items-center gap-1 bg-white dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 shadow-sm">
@@ -454,8 +454,8 @@ export default function AdminDashboard() {
                     >
                       <ChevronLeft size={20} />
                     </button>
-                    
-                    <div 
+
+                    <div
                       className="relative flex items-center mx-2 group cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-2 transition-colors"
                       onClick={() => dateInputRef.current?.showPicker()}
                     >
@@ -463,10 +463,10 @@ export default function AdminDashboard() {
                       <h2 className="text-gray-800 dark:text-gray-100 text-sm md:text-base font-bold min-w-0 md:min-w-[180px] text-center capitalize truncate pl-8 pr-2 pointer-events-none">
                         {formatDate(currentDate)}
                       </h2>
-                      <input 
+                      <input
                         ref={dateInputRef}
-                        type="date" 
-                        value={getDateInputFormat(currentDate)} 
+                        type="date"
+                        value={getDateInputFormat(currentDate)}
                         onChange={handleDateChange}
                         className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                         title="Seleccionar Fecha"
@@ -494,13 +494,13 @@ export default function AdminDashboard() {
 
               <div className="bg-gray-50 dark:bg-[#222222] rounded-lg p-3 mb-4 text-sm text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-gray-700 flex justify-between items-center transition-colors">
                 <div>
-                  <span className="font-semibold text-black dark:text-white mr-2">Vista Dinámica</span>
-                  Haz clic en el panel derecho sobre un departamento para filtrar, o arrastra tareas al horario.
+                  <span className="font-semibold text-black dark:text-white mr-2"></span>
+                  Drag and drop task, employee or department to modify
                 </div>
               </div>
 
               {/* Grid del Timeline */}
-              <CalendarDropzone>
+              <div>
                 <div className="min-w-[700px] relative ">
                   {/* Header de Horas Dinámico con Color */}
                   <div
@@ -535,8 +535,8 @@ export default function AdminDashboard() {
                       <div className="flex-1 relative flex">
                         {/* Celdas Droppables para cada hora */}
                         {timeSlots.map((slot, idx) => (
-                          <CreateTaskModal 
-                            key={`modal-${emp}-${idx}`} 
+                          <CreateTaskModal
+                            key={`modal-${emp}-${idx}`}
                             onSave={(data) => {
                               const dateToUse = calendarView === "7_days" ? (slot.value as string) : currentDate.toDateString();
                               const hourToUse = calendarView === "7_days" ? 9 : (slot.value as number);
@@ -633,11 +633,11 @@ export default function AdminDashboard() {
                     </div>
                   )) : (
                     <div className="p-8 text-center text-gray-400 font-medium mt-10">
-                      No hay empleados en pantalla. <br /><br /> Haz clic en un Departamento desde el panel lateral.
+                      They are not employees <br /><br /> Haz clic en un Departamento desde el panel lateral.
                     </div>
                   )}
                 </div>
-              </CalendarDropzone>
+              </div>
 
             </div>
 

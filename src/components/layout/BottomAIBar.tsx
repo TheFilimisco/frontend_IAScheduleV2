@@ -22,14 +22,14 @@ interface BottomAIBarProps {
 }
 
 const CHIP_STYLES: Record<AIMention["type"], string> = {
-  employee:   "bg-blue-100   text-blue-700   border-blue-200",
-  task:       "bg-violet-100 text-violet-700 border-violet-200",
+  employee: "bg-blue-100   text-blue-700   border-blue-200",
+  task: "bg-violet-100 text-violet-700 border-violet-200",
   department: "bg-emerald-100 text-emerald-700 border-emerald-200",
 };
 
 const TYPE_LABEL: Record<AIMention["type"], string> = {
-  employee:   "emp",
-  task:       "task",
+  employee: "emp",
+  task: "task",
   department: "dept",
 };
 

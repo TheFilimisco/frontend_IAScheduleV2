@@ -278,6 +278,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const apiPayload = { method: 'POST', endpoint: api('/api/tasks'), body: apiTask };
     get().addLog('CREATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      // Optimistic update
+      const tempId = task.id;
+      set((state) => ({ tasksData: [...state.tasksData, task] }));
+
       try {
         const res = await fetch(api('/api/tasks'), {
           method: 'POST',
@@ -286,10 +290,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         });
         if (res.ok) {
           const data = await res.json();
-          // API always returns populated task
-          set((state) => ({ tasksData: [...state.tasksData, mapApiTaskToFrontend(data.task || apiTask)] }));
+          // Replace temp task with real data from API
+          set((state) => ({
+            tasksData: state.tasksData.map(t => t.id === tempId ? mapApiTaskToFrontend(data.task || apiTask) : t)
+          }));
+        } else {
+          // Revert on error
+          set((state) => ({ tasksData: state.tasksData.filter(t => t.id !== tempId) }));
         }
-      } catch (err) { console.error("Error creating task", err); }
+      } catch (err) {
+        console.error("Error creating task", err);
+        // Revert on error
+        set((state) => ({ tasksData: state.tasksData.filter(t => t.id !== tempId) }));
+      }
     } else {
       set((state) => ({ tasksData: [...state.tasksData, task] }));
     }
@@ -318,6 +331,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const apiPayload = { method: 'PUT', endpoint: api(`/api/tasks/${taskId}`), body: apiUpdates };
     get().addLog('UPDATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      // Optimistic update
+      const previousTasks = get().tasksData;
+      set((state) => ({
+        tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t)
+      }));
+
       try {
         const res = await fetch(api(`/api/tasks/${taskId}`), {
           method: 'PUT',
@@ -329,8 +348,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           set((state) => ({
             tasksData: state.tasksData.map(t => t.id === taskId ? mapApiTaskToFrontend(data.task) : t)
           }));
+        } else {
+          // Revert on error
+          set({ tasksData: previousTasks });
         }
-      } catch (err) { console.error("Error updating task", err); }
+      } catch (err) {
+        console.error("Error updating task", err);
+        // Revert on error
+        set({ tasksData: previousTasks });
+      }
     } else {
       set((state) => ({
         tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t)
@@ -342,16 +368,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const apiPayload = { method: 'DELETE', endpoint: api(`/api/tasks/${taskId}`) };
     get().addLog('DELETE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      // Optimistic update
+      const previousTasks = get().tasksData;
+      set((state) => ({
+        tasksData: state.tasksData.filter(t => t.id !== taskId)
+      }));
+
       try {
         const res = await fetch(api(`/api/tasks/${taskId}`), { method: 'DELETE' });
-        if (res.ok) {
-          set((state) => ({
-            tasksData: state.tasksData.filter(t => t.id !== taskId)
-          }));
-        } else {
+        if (!res.ok) {
           console.error("Failed to delete task:", await res.json());
+          // Revert on error
+          set({ tasksData: previousTasks });
         }
-      } catch (err) { console.error("Error deleting task", err); }
+      } catch (err) {
+        console.error("Error deleting task", err);
+        // Revert on error
+        set({ tasksData: previousTasks });
+      }
     } else {
       set((state) => ({
         tasksData: state.tasksData.filter(t => t.id !== taskId)
