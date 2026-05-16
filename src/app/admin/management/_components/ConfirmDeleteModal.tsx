@@ -46,7 +46,7 @@ export function ConfirmDeleteModal({ label, isOpen, onConfirm, onCancel }: Confi
         {/* Body */}
         <p className="text-gray-400 text-sm leading-relaxed">
           Are you sure you want to delete{" "}
-          <span className="text-white font-semibold">"{label}"</span>?
+          <span className="text-white font-semibold">&quot;{label}&quot;</span>?
           <br />
           <span className="text-gray-500 text-xs mt-1 block">This action cannot be undone.</span>
         </p>

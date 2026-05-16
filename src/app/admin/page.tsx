@@ -47,10 +47,9 @@ export default function AdminDashboard() {
     employeesFullList,
     isLoading,
     fetchData,
-    setTasksData,
     addTask,
     updateTask,
-    deleteTask,
+    unassignTask,
     setEmployeesList,
     sendAIPrompt,
     confirmAIAction,
@@ -252,16 +251,10 @@ export default function AdminDashboard() {
         return;
       }
 
-      // 2b. Asignar nueva tarea desde el panel lateral
+      // 2b. Asignar tarea desde el panel lateral
       if (active.data.current?.type === "Tasks") {
-        const taskName = active.data.current?.value;
-        const currentDayTasks = tasksData.filter(t => t.dateStr === currentDate.toDateString());
-
-        // Validación: Tareas exclusivas por día
-        if (currentDayTasks.some(t => t.title === taskName)) {
-          showError(`🚫 La tarea "${taskName}" ya ha sido asignada a alguien más hoy.`);
-          return;
-        }
+        const taskName = active.data.current?.value as string;
+        const draggedTaskId = active.data.current?.taskId;
 
         // Validación: Superposición de horarios
         if (checkOverlap(emp, currentDate.toDateString(), hour, slotDuration)) {
@@ -272,8 +265,27 @@ export default function AdminDashboard() {
           return;
         }
 
-        const result = await addTask({ id: Date.now(), employee: emp, title: taskName, description: "", startHour: hour, duration: slotDuration, color: "bg-yellow-600", dateStr: currentDate.toDateString() });
-        if (!result.ok) showError(`🚫 No se pudo guardar la tarea: ${result.error}`);
+        // Buscar la tarea exacta por ID (evita ambigüedad con títulos duplicados).
+        // Si la tarea no tiene empleado, la actualizamos; si ya está asignada,
+        // bloqueamos para no sobreescribir una asignación existente.
+        const exactTask = draggedTaskId !== undefined
+          ? tasksData.find(t => t.id == draggedTaskId)
+          : tasksData.find(t => t.title === taskName && !t.employee);
+
+        if (exactTask && !exactTask.employee) {
+          updateTask(exactTask.id, {
+            employee: emp,
+            startHour: hour,
+            duration: slotDuration,
+            dateStr: currentDate.toDateString(),
+          });
+        } else if (exactTask && exactTask.employee) {
+          showError(`🚫 La tarea "${taskName}" ya está asignada a ${exactTask.employee}.`);
+        } else {
+          // Tarea no encontrada en tasksData — crear nueva
+          const result = await addTask({ id: Date.now(), employee: emp, title: taskName, description: "", startHour: hour, duration: slotDuration, color: "bg-yellow-600", dateStr: currentDate.toDateString() });
+          if (!result.ok) showError(`🚫 No se pudo guardar la tarea: ${result.error}`);
+        }
       }
       return;
     }
@@ -341,8 +353,6 @@ export default function AdminDashboard() {
       setAiResponse(result.message ?? "La IA no devolvió una respuesta.");
       if (result.pendingConfirmation) {
         setAiConfirmation(result.pendingConfirmation);
-      } else {
-        setTimeout(() => setAiResponse(null), 8000);
       }
     } catch {
       showError("🚫 Error al contactar la IA. Verifica que el servidor esté activo.");
@@ -358,7 +368,6 @@ export default function AdminDashboard() {
     try {
       const message = await confirmAIAction(id, approved);
       setAiResponse(message ?? (approved ? "Eliminación realizada." : "Operación cancelada."));
-      setTimeout(() => setAiResponse(null), 6000);
     } catch {
       showError("🚫 Error al confirmar la acción.");
     } finally {
@@ -404,9 +413,9 @@ export default function AdminDashboard() {
         d.setDate(startOfWeek.getDate() + i);
         weekDays.push(d.toDateString());
       }
-      return tasksData.filter(t => weekDays.includes(t.dateStr));
+      return tasksData.filter(t => weekDays.includes(t.dateStr) && t.status !== 'completed');
     }
-    return tasksData.filter(t => t.dateStr === currentDate.toDateString());
+    return tasksData.filter(t => t.dateStr === currentDate.toDateString() && t.status !== 'completed');
   }, [calendarView, currentDate, tasksData]);
 
   const tasksForCurrentDate = tasksForView; // Alias for backward compatibility in some places
@@ -439,17 +448,23 @@ export default function AdminDashboard() {
     return map;
   }, [tasksData]);
 
-  // Determinar elementos activos para mostrar X en el panel lateral
+  // Task items with real DB IDs for the SidePanel drag data
+  const taskItemsForPanel = useMemo(() =>
+    tasksData.filter(t => t.status !== 'completed').map(t => ({ id: t.id, title: t.title, priority: t.priority }))
+  , [tasksData]);
+
+  // Solo tareas con empleado asignado se marcan como "activas" en el sidebar
   const activeItems = [
     ...employeesList,
-    ...tasksForCurrentDate.map(t => t.title)
+    ...tasksForCurrentDate.filter(t => t.employee).map(t => t.title)
   ];
 
   const handleRemoveFromBoard = (type: string, value: string) => {
     if (type === "Employees") {
       setEmployeesList(prev => prev.filter(e => e !== value));
     } else if (type === "Tasks") {
-      setTasksData(prev => prev.filter(t => t.title !== value || t.dateStr !== currentDate.toDateString()));
+      const task = tasksData.find(t => t.title === value && t.employee);
+      if (task) unassignTask(task.id);
     }
   };
 
@@ -667,7 +682,7 @@ export default function AdminDashboard() {
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    deleteTask(task.id);
+                                    unassignTask(task.id);
                                   }}
                                   className="opacity-0 group-hover/task:opacity-100 text-white hover:text-red-200 transition-opacity bg-black/20 hover:bg-black/40 rounded-full p-0.5 ml-1 shrink-0"
                                 >
@@ -720,6 +735,7 @@ export default function AdminDashboard() {
               employeesByDept={employeesByDept}
               tasksByDept={tasksByDept}
               taskMeta={taskMeta}
+              taskItems={taskItemsForPanel}
             />
           </div>
         </main>
@@ -730,6 +746,7 @@ export default function AdminDashboard() {
           onSend={handleSendPrompt}
           isLoading={isAILoading}
           aiResponse={aiResponse}
+          onDismissResponse={() => setAiResponse(null)}
           pendingConfirmation={aiConfirmation}
           onConfirm={handleAIConfirm}
         />

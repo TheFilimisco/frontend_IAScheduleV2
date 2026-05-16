@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { X } from "lucide-react";
 import { flushSync } from "react-dom";
 import { useDashboardStore } from "@/store/dashboardStore";
 import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -13,6 +14,7 @@ import { CreateDepartmentModal } from "@/components/modals/CreateDepartmentModal
 import { ManagementSection, PlusButton } from "./_components/ManagementSection";
 import { ManagementPill } from "./_components/ManagementPill";
 import { TasksSection } from "./_components/TasksSection";
+import type { TaskFormData } from "@/components/modals/CreateTaskModal";
 
 const TODAY_STR = new Date().toDateString();
 
@@ -100,20 +102,21 @@ export default function AdminManagement() {
   };
 
   // --- Tasks CRUD ---
-  const createTask = (d: any) => {
-    // Let the API/store assign the real id; pass minimal data
+  const createTask = (d: TaskFormData) => {
     if (d.title) storeAddTask({ id: 0, title: d.title, dateStr: selectedDay, employee: "", description: d.description || "", startHour: 9, duration: 1, color: "bg-blue-500" });
   };
-  const updateTask = (old: string, d: any) => {
-    // Find by title only (dateStr may differ in timezone/format between API and local)
-    const task = tasks.find(t => t.title === old);
-    if (d.title && task) storeUpdateTask(task.id, { title: d.title });
+  const updateTask = (id: string | number, d: TaskFormData) => {
+    storeUpdateTask(id, {
+      title: d.title,
+      description: d.description,
+      priority: d.priority,
+      status: d.status,
+      duration: d.durationMinutes / 60,
+    });
   };
-  const deleteTask = (e: React.MouseEvent, title: string) => {
+  const deleteTask = (e: React.MouseEvent, id: string | number) => {
     e.stopPropagation();
-    // Find by title only — dateStr format may differ between API and local
-    const task = tasks.find(t => t.title === title);
-    if (task) storeDeleteTask(task.id);
+    storeDeleteTask(id);
   };
 
   return (
@@ -123,11 +126,13 @@ export default function AdminManagement() {
       <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} sensors={sensors}>
         <main className="flex-1 flex flex-col items-center gap-6 px-10  pt-24 lg:pt-4 pb-24 lg:pb-0 w-full">
 
-          {/* ── Error Banner ── */}
+          {/* ── Error Toast ── */}
           {errorMsg && (
-            <div className="w-full max-w-7xl flex items-center justify-between gap-3 bg-red-900/30 border border-red-700/50 text-red-300 text-sm font-medium px-5 py-3 rounded-xl">
-              <span>⚠️ {errorMsg}</span>
-              <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-200 transition-colors text-xs underline shrink-0">Cerrar</button>
+            <div className="fixed top-24 md:top-20 left-1/2 -translate-x-1/2 z-50 bg-white border-l-4 border-red-400 text-gray-800 px-4 md:px-6 py-4 rounded-sm shadow-xl font-medium text-sm flex items-center justify-between gap-4 w-[90%] md:w-auto md:min-w-87.5 animate-in fade-in slide-in-from-top-4">
+              <span>{errorMsg}</span>
+              <button onClick={() => setErrorMsg(null)} className="text-gray-400 hover:text-red-500 transition-colors shrink-0">
+                <X size={16} />
+              </button>
             </div>
           )}
 
@@ -217,6 +222,7 @@ export default function AdminManagement() {
           onRemoveMention={(idx) => setAiMentions(prev => prev.filter((_, i) => i !== idx))}
           isLoading={isAILoading}
           aiResponse={aiResponse}
+          onDismissResponse={() => setAiResponse(null)}
           pendingConfirmation={aiConfirmation}
           onConfirm={async (id, approved) => {
             setAiConfirmation(null);
@@ -224,7 +230,6 @@ export default function AdminManagement() {
             try {
               const message = await confirmAIAction(id, approved);
               setAiResponse(message ?? (approved ? "Eliminación realizada." : "Operación cancelada."));
-              setTimeout(() => setAiResponse(null), 6000);
             } catch {
               setErrorMsg("🚫 Error al confirmar la acción.");
             } finally {
@@ -246,8 +251,6 @@ export default function AdminManagement() {
               setAiResponse(result.message ?? "La IA no devolvió una respuesta.");
               if (result.pendingConfirmation) {
                 setAiConfirmation(result.pendingConfirmation);
-              } else {
-                setTimeout(() => setAiResponse(null), 8000);
               }
             } catch {
               setErrorMsg("🚫 Error al contactar la IA. Verifica que el servidor esté activo.");

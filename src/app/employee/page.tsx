@@ -2,19 +2,10 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useDashboardStore } from "@/store/dashboardStore";
+import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
 import { ViewTaskModal } from "@/components/modals/ViewTaskModal";
-import { ChevronLeft, ChevronRight, Calendar, Clock, CheckCircle2, Circle } from "lucide-react";
-
-// ── Mock: empleado actual (en producción vendrá de sesión/auth) ──────────────
-const CURRENT_EMPLOYEE = "Juan";
-
-// ── Colores por departamento ─────────────────────────────────────────────────
-const DEPT_COLORS: Record<string, string> = {
-  Design: "#2563eb",
-  Marketing: "#db2777",
-  "Call Center": "#ea580c",
-};
+import { ChevronLeft, ChevronRight, Calendar, Clock, Circle, RotateCcw } from "lucide-react";
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: "#ef4444",
@@ -24,14 +15,19 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function EmployeeDashboard() {
-  const { tasksData, employeesByDept, fetchData, updateTask } =
+  const { linkedEmployee } = useAuth();
+  const { tasksData, departmentsList, fetchData, updateTask, addTaskComment } =
     useDashboardStore();
+
+  // Nombre completo del empleado autenticado
+  const currentEmployee = linkedEmployee
+    ? `${linkedEmployee.firstName} ${linkedEmployee.lastName}`.trim()
+    : "";
 
   // ── State ────────────────────────────────────────────────────────────────
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState("hours");
   const [viewingTask, setViewingTask] = useState<any | null>(null);
-  const [completedTaskIds, setCompletedTaskIds] = useState<Set<number | string>>(new Set());
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,11 +36,12 @@ export default function EmployeeDashboard() {
 
   // ── Department color for this employee ──────────────────────────────────
   const myDeptColor = useMemo(() => {
-    const dept = Object.keys(employeesByDept).find((k) =>
-      employeesByDept[k].includes(CURRENT_EMPLOYEE)
-    );
-    return dept ? (DEPT_COLORS[dept] ?? "#374151") : "#374151";
-  }, [employeesByDept]);
+    if (!linkedEmployee?.departmentId) return "#374151";
+    const deptRef = linkedEmployee.departmentId as unknown as { id?: string; _id?: string } | string;
+    const deptId = typeof deptRef === "object" ? (deptRef.id ?? deptRef._id) : deptRef;
+    const dept = departmentsList.find((d) => d.id === deptId);
+    return dept?.color ?? "#374151";
+  }, [linkedEmployee, departmentsList]);
 
   // ── Time slots (same logic as admin) ────────────────────────────────────
   const timeSlots = useMemo(() => {
@@ -80,16 +77,24 @@ export default function EmployeeDashboard() {
 
   // ── My tasks for the current view ────────────────────────────────────────
   const myTasks = useMemo(
-    () => tasksData.filter((t) => t.employee === CURRENT_EMPLOYEE),
-    [tasksData]
+    () => tasksData.filter((t) => t.employee === currentEmployee),
+    [tasksData, currentEmployee]
   );
 
   const tasksForView = useMemo(() => {
     if (calendarView === "7_days") {
       const weekDates = new Set(timeSlots.map((s) => s.value as string));
-      return myTasks.filter((t) => weekDates.has(t.dateStr));
+      return myTasks.filter((t) => weekDates.has(t.dateStr) && t.status !== 'completed');
     }
-    return myTasks.filter((t) => t.dateStr === currentDate.toDateString());
+    return myTasks.filter((t) => t.dateStr === currentDate.toDateString() && t.status !== 'completed');
+  }, [myTasks, calendarView, currentDate, timeSlots]);
+
+  const completedForView = useMemo(() => {
+    if (calendarView === "7_days") {
+      const weekDates = new Set(timeSlots.map((s) => s.value as string));
+      return myTasks.filter((t) => weekDates.has(t.dateStr) && t.status === 'completed');
+    }
+    return myTasks.filter((t) => t.dateStr === currentDate.toDateString() && t.status === 'completed');
   }, [myTasks, calendarView, currentDate, timeSlots]);
 
   // ── Date helpers ─────────────────────────────────────────────────────────
@@ -147,15 +152,12 @@ export default function EmployeeDashboard() {
     });
   }, [tasksForView]);
 
-  const pendingTasks = sortedSideTasks.filter((t) => !completedTaskIds.has(t.id));
-  const doneTasks = sortedSideTasks.filter((t) => completedTaskIds.has(t.id));
+  const markComplete = (id: number | string) => {
+    updateTask(id, { status: 'completed' });
+  };
 
-  const toggleComplete = (id: number | string) => {
-    setCompletedTaskIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  const markUncomplete = (id: number | string) => {
+    updateTask(id, { status: 'pending' });
   };
 
   return (
@@ -225,7 +227,7 @@ export default function EmployeeDashboard() {
                 className="px-6 py-2 rounded-lg font-bold shadow-md tracking-wide text-white text-sm md:text-base w-full md:w-auto text-center"
                 style={{ backgroundColor: myDeptColor }}
               >
-                {CURRENT_EMPLOYEE}
+                {currentEmployee}
               </div>
             </div>
 
@@ -260,7 +262,7 @@ export default function EmployeeDashboard() {
                 {/* Single employee row */}
                 <div className="flex border-b border-gray-100 dark:border-gray-800 relative h-20 bg-white dark:bg-[#222222]">
                   <div className="w-28 shrink-0 p-3 border-r border-gray-200 dark:border-gray-800 flex items-center text-sm font-semibold text-gray-800 dark:text-gray-200 bg-white dark:bg-[#1a1a1a] sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                    {CURRENT_EMPLOYEE}
+                    {currentEmployee}
                   </div>
 
                   {/* Task blocks (read-only, clickable) */}
@@ -275,16 +277,15 @@ export default function EmployeeDashboard() {
                       const pos = getTaskPosition(task);
                       if (!pos) return null;
                       const dotColor = task.priority ? PRIORITY_COLORS[task.priority] : undefined;
-                      const isCompleted = completedTaskIds.has(task.id);
                       return (
                         <button
                           key={task.id}
                           onClick={() => setViewingTask(task)}
-                          className={`absolute top-2 bottom-2 rounded-lg text-white p-2 shadow-md flex items-center gap-1.5 overflow-hidden whitespace-nowrap hover:brightness-110 transition-all text-left ${isCompleted ? "opacity-90" : ""}`}
+                          className="absolute top-2 bottom-2 rounded-lg text-white p-2 shadow-md flex items-center gap-1.5 overflow-hidden whitespace-nowrap hover:brightness-110 transition-all text-left"
                           style={{
                             left: `${pos.leftPercent}%`,
                             width: `${pos.widthPercent}%`,
-                            backgroundColor: isCompleted ? "#16a34a" : myDeptColor,
+                            backgroundColor: myDeptColor,
                           }}
                         >
                           {dotColor && (
@@ -317,103 +318,95 @@ export default function EmployeeDashboard() {
         <div className="w-full xl:w-80 shrink-0">
           <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col gap-3 transition-colors">
 
-            {/* ── Pending tasks header ── */}
+            {/* Header */}
             <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm px-1 flex items-center gap-2">
               <Clock size={15} className="text-gray-400" />
               Mis Tareas
               <span className="ml-auto text-xs bg-gray-100 dark:bg-[#333] text-gray-500 rounded px-2 py-0.5 font-mono">
-                {pendingTasks.length}
+                {sortedSideTasks.length}
               </span>
             </h3>
 
-            {/* ── Pending list ── */}
-            {pendingTasks.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">
-                {doneTasks.length > 0 ? "¡Todas completadas! 🎉" : "Sin tareas para este período."}
-              </p>
+            {sortedSideTasks.length === 0 && completedForView.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">Sin tareas para este período.</p>
             ) : (
-              pendingTasks.map((task) => {
-                const dotColor = task.priority ? PRIORITY_COLORS[task.priority] : undefined;
-                const timeLabel =
-                  calendarView === "7_days"
-                    ? task.dateStr
-                    : `${task.startHour}:00 – ${task.startHour + task.duration}:00`;
-                return (
-                  <div key={task.id} className="w-full bg-[#333333] hover:bg-[#3a3a3a] text-white rounded-lg px-3 py-2.5 flex items-start gap-2 transition-colors group">
-                    {/* Priority dot */}
-                    <span
-                      className="mt-0.5 inline-block h-2 w-2 rounded-full shrink-0 ring-1 ring-white/20"
-                      style={dotColor
-                        ? { backgroundColor: dotColor, boxShadow: `0 0 5px ${dotColor}99` }
-                        : { backgroundColor: "#6b7280" }}
-                    />
-                    {/* Content — click opens modal */}
-                    <button
-                      onClick={() => setViewingTask(task)}
-                      className="flex-1 min-w-0 text-left"
-                    >
-                      <p className="font-semibold text-sm truncate">{task.title}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{timeLabel}</p>
-                      {task.priority && (
-                        <span
-                          className="text-[9px] font-bold rounded px-1.5 py-0.5 mt-1 inline-block capitalize"
-                          style={{ color: dotColor, backgroundColor: dotColor + "22" }}
-                        >
-                          {task.priority}
-                        </span>
-                      )}
-                    </button>
-                    {/* Check button → marks done */}
-                    <button
-                      onClick={() => toggleComplete(task.id)}
-                      title="Marcar como completada"
-                      className="mt-0.5 shrink-0 text-gray-500 hover:text-green-400 transition-colors"
-                    >
-                      <Circle size={15} />
-                    </button>
-                  </div>
-                );
-              })
-            )}
-
-            {/* ── Completed section ── */}
-            {doneTasks.length > 0 && (
               <>
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                  <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
-                    <CheckCircle2 size={11} className="text-green-500" />
-                    Completadas ({doneTasks.length})
-                  </span>
-                  <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                </div>
-
-                {doneTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="w-full bg-[#222222] text-gray-500 rounded-lg px-3 py-2 flex items-start gap-2 transition-colors group"
-                  >
-                    <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-green-500" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate line-through opacity-60">{task.title}</p>
+                {sortedSideTasks.map((task) => {
+                  const dotColor = task.priority ? PRIORITY_COLORS[task.priority] : undefined;
+                  const timeLabel =
+                    calendarView === "7_days"
+                      ? task.dateStr
+                      : `${task.startHour}:00 – ${task.startHour + task.duration}:00`;
+                  return (
+                    <div key={task.id} className="w-full bg-[#333333] hover:bg-[#3a3a3a] text-white rounded-lg px-3 py-2.5 flex items-start gap-2 transition-colors">
+                      <span
+                        className="mt-0.5 inline-block h-2 w-2 rounded-full shrink-0 ring-1 ring-white/20"
+                        style={dotColor
+                          ? { backgroundColor: dotColor, boxShadow: `0 0 5px ${dotColor}99` }
+                          : { backgroundColor: "#6b7280" }}
+                      />
+                      <button onClick={() => setViewingTask(task)} className="flex-1 min-w-0 text-left">
+                        <p className="font-semibold text-sm truncate">{task.title}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{timeLabel}</p>
+                        {task.priority && (
+                          <span
+                            className="text-[9px] font-bold rounded px-1.5 py-0.5 mt-1 inline-block capitalize"
+                            style={{ color: dotColor, backgroundColor: dotColor + "22" }}
+                          >
+                            {task.priority}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => markComplete(task.id)}
+                        title="Marcar como completada"
+                        className="mt-0.5 shrink-0 text-gray-500 hover:text-green-400 transition-colors"
+                      >
+                        <Circle size={15} />
+                      </button>
                     </div>
-                    {/* Un-complete button */}
-                    <button
-                      onClick={() => toggleComplete(task.id)}
-                      title="Marcar como pendiente"
-                      className="mt-0.5 shrink-0 text-gray-600 hover:text-yellow-400 transition-colors"
-                    >
-                      <Circle size={13} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
+
+                {completedForView.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                      <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+                        Completadas ({completedForView.length})
+                      </span>
+                      <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                    </div>
+                    {completedForView.map((task) => (
+                      <div
+                        key={task.id}
+                        className="w-full bg-[#222222] text-gray-500 rounded-lg px-3 py-2.5 flex items-center gap-2 group"
+                      >
+                        <span className="inline-block h-2 w-2 rounded-full shrink-0 bg-green-600" />
+                        <button
+                          onClick={() => setViewingTask(task)}
+                          className="flex-1 min-w-0 text-left hover:text-gray-300 transition-colors"
+                          title="Ver detalles / añadir comentario"
+                        >
+                          <p className="text-sm truncate line-through opacity-60">{task.title}</p>
+                        </button>
+                        <button
+                          onClick={() => markUncomplete(task.id)}
+                          title="Desmarcar como completada"
+                          className="shrink-0 text-gray-600 hover:text-yellow-400 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <RotateCcw size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </div>
         </div>
       </main>
 
-      {/* ViewTaskModal (read-only for admin fields, but allows comments for completed tasks) */}
       {viewingTask && (
         <ViewTaskModal
           task={viewingTask}
@@ -424,7 +417,11 @@ export default function EmployeeDashboard() {
             setViewingTask({ ...viewingTask, ...updatedTask });
             return true;
           }}
-          isCompleted={completedTaskIds.has(viewingTask.id)}
+          onSaveComment={async (comment) => {
+            const result = await addTaskComment(viewingTask.id, comment);
+            if (result.ok) setViewingTask((prev: any) => prev ? { ...prev, comment } : prev);
+          }}
+          isCompleted={viewingTask.status === 'completed'}
           readOnlyAdminFields={true}
         />
       )}

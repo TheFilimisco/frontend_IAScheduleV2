@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Clock, CalendarDays, User, AlignLeft, Edit2, Check, MessageSquare } from "lucide-react";
 
 export function ViewTaskModal({
@@ -9,6 +9,7 @@ export function ViewTaskModal({
   open,
   onOpenChange,
   onUpdate,
+  onSaveComment,
   isCompleted = false,
   readOnlyAdminFields = false,
 }: {
@@ -16,6 +17,7 @@ export function ViewTaskModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdate?: (updatedTask: any) => boolean | void;
+  onSaveComment?: (comment: string) => void;
   isCompleted?: boolean;
   readOnlyAdminFields?: boolean;
 }) {
@@ -36,7 +38,9 @@ export function ViewTaskModal({
   };
 
   const handleSaveComment = () => {
-    if (onUpdate) {
+    if (onSaveComment) {
+      onSaveComment(comment);
+    } else if (onUpdate) {
       const success = onUpdate({ ...task, comment });
       if (success === false) return;
     }

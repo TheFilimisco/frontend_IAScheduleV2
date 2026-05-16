@@ -42,6 +42,7 @@ export type Task = {
   color: string;
   dateStr: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  status?: 'pending' | 'in_progress' | 'completed' | 'blocked';
 };
 
 export type HistoryLog = {

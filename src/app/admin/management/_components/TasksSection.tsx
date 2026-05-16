@@ -7,16 +7,18 @@ import { ManagementPill } from "./ManagementPill";
 import { PlusButton } from "./ManagementSection";
 import { DraggableItem } from "@/components/dnd/DraggableItem";
 import { CreateTaskModal } from "@/components/modals/CreateTaskModal";
+import type { TaskFormData } from "@/components/modals/CreateTaskModal";
+import type { Task } from "@/store/dashboardStore";
 
 export type TaskItem = { title: string; dateStr: string };
 
 interface TasksSectionProps {
-  tasks: TaskItem[];
+  tasks: Task[];
   selectedDay: string;
   onSelectDay: (d: string) => void;
-  onCreate: (data: any) => void;
-  onUpdate: (oldTitle: string, data: any) => void;
-  onDelete: (e: React.MouseEvent, title: string) => void;
+  onCreate: (data: TaskFormData) => void;
+  onUpdate: (id: string | number, data: TaskFormData) => void;
+  onDelete: (e: React.MouseEvent, id: string | number) => void;
 }
 
 function formatDateLabel(dateStr: string) {
@@ -86,13 +88,22 @@ export function TasksSection({
         <div className="bg-[#999999] p-6 min-h-[320px] flex flex-row flex-wrap gap-3 content-start">
           {filtered.length > 0 ? (
             filtered.map((task, idx) => {
-              const uniqueKey = (task as any).id || `task-${task.title}-${idx}`;
+              const uniqueKey = task.id || `task-${task.title}-${idx}`;
               return (
-                <DraggableItem key={uniqueKey} id={`drag-T-${task.title}`} data={{ type: "Tasks", value: task.title }}>
-                  <CreateTaskModal initialData={{ title: task.title }} onSave={d => onUpdate(task.title, d)}>
+                <DraggableItem key={String(uniqueKey)} id={`drag-T-${task.title}`} data={{ type: "Tasks", value: task.title }}>
+                  <CreateTaskModal
+                    initialData={{
+                      title: task.title,
+                      description: task.description || "",
+                      priority: task.priority ?? "medium",
+                      status: task.status ?? "pending",
+                      durationMinutes: Math.round((task.duration || 1) * 60),
+                    }}
+                    onSave={d => onUpdate(task.id, d)}
+                  >
                     <ManagementPill
                       label={task.title}
-                      onDelete={e => onDelete(e, task.title)}
+                      onDelete={e => onDelete(e, task.id)}
                     />
                   </CreateTaskModal>
                 </DraggableItem>

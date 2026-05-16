@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,13 +41,15 @@ function generateCode(firstName: string, lastName: string): string {
 }
 
 // ─── Code uniqueness check ───────────────────────────────────────────────────
-// In API mode → GET /api/employees/check-code?code=XXX  { available: boolean }
+// In API mode → GET {API_BASE}/api/employees/check-code?code=XXX  { available: boolean }
 // In mock mode → always returns true (no real data to compare against)
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
 async function checkCodeAvailability(code: string): Promise<boolean> {
   if (!code || code.length < 6) return true;
   if (process.env.NEXT_PUBLIC_USE_API !== "true") return true;
   try {
-    const res = await fetch(`/api/employees/check-code?code=${encodeURIComponent(code)}`);
+    const res = await fetch(`${API_BASE}/api/employees/check-code?code=${encodeURIComponent(code)}`);
     if (!res.ok) return true; // on network error, optimistically allow
     const data = await res.json();
     return data.available === true;
@@ -102,14 +104,18 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
     }, 500);
   }, [isEdit]);
 
-  // Auto-generate code when firstName or lastName changes (only if not manually edited)
-  useEffect(() => {
-    if (!codeEdited && !isEdit && (form.firstName || form.lastName)) {
-      const newCode = generateCode(form.firstName, form.lastName);
-      set("code", newCode);
+  const handleNameChange = (field: "firstName" | "lastName", val: string) => {
+    if (!codeEdited && !isEdit) {
+      const next = field === "firstName"
+        ? { firstName: val, lastName: form.lastName }
+        : { firstName: form.firstName, lastName: val };
+      const newCode = generateCode(next.firstName, next.lastName);
+      setForm((prev) => ({ ...prev, [field]: val, code: newCode }));
       triggerCodeValidation(newCode);
+    } else {
+      set(field, val);
     }
-  }, [form.firstName, form.lastName]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
   const handleCodeChange = (val: string) => {
     const upper = val.toUpperCase();
@@ -165,14 +171,14 @@ export function CreateEmployeeModal({ children, initialData, onSave }: CreateEmp
               className={inputCls}
               required
               value={form.firstName}
-              onChange={(e) => set("firstName", e.target.value)}
+              onChange={(e) => handleNameChange("firstName", e.target.value)}
             />
             <Input
               placeholder="Last Name"
               className={inputCls}
               required
               value={form.lastName}
-              onChange={(e) => set("lastName", e.target.value)}
+              onChange={(e) => handleNameChange("lastName", e.target.value)}
             />
           </div>
 

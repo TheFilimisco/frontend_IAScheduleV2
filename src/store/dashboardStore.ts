@@ -35,7 +35,9 @@ interface DashboardState {
   setTasksData: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   addTask: (task: Task) => Promise<{ ok: boolean; error?: string }>;
   updateTask: (taskId: number | string, updates: Partial<Task>) => void;
+  unassignTask: (taskId: number | string) => Promise<void>;
   deleteTask: (taskId: number | string) => void;
+  addTaskComment: (taskId: number | string, comment: string) => Promise<{ ok: boolean; error?: string }>;
 
   // Departments
   addDepartment: (dept: any) => void;
@@ -111,8 +113,8 @@ function mapApiTaskToFrontend(apiTask: any): Task {
   const employeeName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : "";
   
   let startHour = 9;
-  let dateStr = new Date().toDateString();
-  
+  let dateStr = "";
+
   if (apiTask.startDate) {
     const d = new Date(apiTask.startDate);
     startHour = d.getHours() + (d.getMinutes() / 60);
@@ -127,11 +129,13 @@ function mapApiTaskToFrontend(apiTask: any): Task {
     employee: employeeName,
     title: apiTask.title,
     description: apiTask.description || "",
+    comment: apiTask.comment || "",
     startHour,
     duration,
     color: deptColor,
     dateStr,
-    priority: apiTask.priority
+    priority: apiTask.priority,
+    status: apiTask.status,
   };
 }
 
@@ -145,10 +149,10 @@ function mapFrontendTaskToApi(task: Task, employeesFullList: Employee[]) {
   return {
     title: task.title,
     description: task.description,
-    assigneeId: emp ? emp.id : undefined,
+    assigneeId: emp ? (emp.id || (emp as any)._id) : undefined,
     startDate: d.toISOString(),
     durationMinutes: Math.round(task.duration * 60),
-    departmentId: emp ? (typeof emp.departmentId === 'object' && emp.departmentId ? emp.departmentId.id : emp.departmentId) : undefined,
+    departmentId: emp ? (typeof emp.departmentId === 'object' && emp.departmentId ? (emp.departmentId.id || (emp.departmentId as any)._id) : emp.departmentId) : undefined,
   };
 }
 
@@ -185,7 +189,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       if (process.env.NEXT_PUBLIC_USE_API === "true") {
         const [tasksRes, sectionsRes, employeesByDeptRes, profRes, schedRes, profListRes, deptListRes, empListRes, empAllRes] = await Promise.all([
-          fetch(api('/api/tasks')).then(res => res.ok ? res.json().then(data => data.tasks ? data.tasks.map(mapApiTaskToFrontend) : []) : []).catch(() => []),
+          fetch(api('/api/tasks')).then(res => res.ok ? res.json().then(data => data.tasks || []) : []).catch(() => []),
           fetch(api('/api/schedule/sections')).then(res => res.ok ? res.json() : []).catch(() => []),
           fetch(api('/api/schedule/employees-by-dept')).then(res => res.ok ? res.json() : {}).catch(() => ({})),
           fetch(api('/api/professions')).then(res => res.ok ? res.json().then(data => data.professions?.map((p: any) => p.name) || []) : []).catch(() => []),
@@ -201,9 +205,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           }) : []).catch(() => []),
         ]);
         
-        set({ 
-          tasksData: Array.isArray(tasksRes) ? tasksRes : [], 
-          adminSections: Array.isArray(sectionsRes) ? sectionsRes : [], 
+        // Map all tasks — keep completed ones so the employee page can show them as done
+        const allMapped = Array.isArray(tasksRes) ? tasksRes.map(mapApiTaskToFrontend) : [];
+        const completedTitles = new Set(allMapped.filter((t) => t.status === 'completed').map((t) => t.title));
+
+        // Strip completed task titles from the admin sidebar sections list only
+        const filteredSections = Array.isArray(sectionsRes)
+          ? sectionsRes.map((s: any) =>
+              s.title === 'Tasks'
+                ? { ...s, items: (s.items as string[]).filter((title) => !completedTitles.has(title)) }
+                : s
+            )
+          : [];
+
+        set({
+          tasksData: allMapped,
+          adminSections: filteredSections,
           employeesByDept: employeesByDeptRes || {},
           professions: Array.isArray(profRes) ? profRes : [],
           schedules: Array.isArray(schedRes) ? schedRes : [],
@@ -316,10 +333,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const apiUpdates: any = {};
     if (updates.title !== undefined) apiUpdates.title = updates.title;
     if (updates.description !== undefined) apiUpdates.description = updates.description;
+    if (updates.priority !== undefined) apiUpdates.priority = updates.priority;
+    if (updates.status !== undefined) apiUpdates.status = updates.status;
     if (updates.duration !== undefined) apiUpdates.durationMinutes = Math.round(updates.duration * 60);
     if (updates.employee !== undefined) {
       const emp = get().employeesFullList.find(e => e.firstName === updates.employee || `${e.firstName} ${e.lastName}` === updates.employee);
-      apiUpdates.assigneeId = emp ? emp.id : null;
+      apiUpdates.assigneeId = emp ? (emp.id || (emp as any)._id) : null;
     }
     if (updates.startHour !== undefined || updates.dateStr !== undefined) {
       const existingTask = get().tasksData.find(t => t.id === taskId);
@@ -335,10 +354,23 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const apiPayload = { method: 'PUT', endpoint: api(`/api/tasks/${taskId}`), body: apiUpdates };
     get().addLog('UPDATE', 'TASK', `API Request: ${JSON.stringify(apiPayload)}`);
     if (process.env.NEXT_PUBLIC_USE_API === "true") {
-      // Optimistic update
       const previousTasks = get().tasksData;
+      const previousSections = get().adminSections;
+
+      const completedTitle = updates.status === 'completed'
+        ? previousTasks.find(t => t.id === taskId)?.title
+        : undefined;
+
       set((state) => ({
-        tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t)
+        tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t),
+        // When completing a task, remove its title from the admin sidebar sections
+        adminSections: completedTitle
+          ? state.adminSections.map(s =>
+              s.title === 'Tasks'
+                ? { ...s, items: s.items.filter((i: string) => i !== completedTitle) }
+                : s
+            )
+          : state.adminSections,
       }));
 
       try {
@@ -348,17 +380,43 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           body: JSON.stringify(apiUpdates)
         });
         if (!res.ok) {
-          // Revert on error
-          set({ tasksData: previousTasks });
+          set({ tasksData: previousTasks, adminSections: previousSections });
         }
       } catch (err) {
         console.error("Error updating task", err);
-        // Revert on error
-        set({ tasksData: previousTasks });
+        set({ tasksData: previousTasks, adminSections: previousSections });
       }
     } else {
       set((state) => ({
         tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, ...updates } : t)
+      }));
+    }
+  },
+
+  unassignTask: async (taskId) => {
+    const apiPayload = { method: 'PUT', endpoint: api(`/api/tasks/${taskId}`), body: { assigneeId: null, startDate: null } };
+    get().addLog('UPDATE', 'TASK', `API Request (unassign): ${JSON.stringify(apiPayload)}`);
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      const previousTasks = get().tasksData;
+      set((state) => ({
+        tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, employee: "", startHour: 9, dateStr: "" } : t)
+      }));
+      try {
+        const res = await fetch(api(`/api/tasks/${taskId}`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assigneeId: null, startDate: null })
+        });
+        if (!res.ok) {
+          set({ tasksData: previousTasks });
+        }
+      } catch (err) {
+        console.error("Error unassigning task", err);
+        set({ tasksData: previousTasks });
+      }
+    } else {
+      set((state) => ({
+        tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, employee: "", startHour: 9, dateStr: "" } : t)
       }));
     }
   },
@@ -390,6 +448,33 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         tasksData: state.tasksData.filter(t => t.id !== taskId)
       }));
     }
+  },
+
+  addTaskComment: async (taskId, comment) => {
+    get().addLog('UPDATE', 'TASK', `Comment on task ${taskId}: ${comment}`);
+    if (process.env.NEXT_PUBLIC_USE_API === "true") {
+      try {
+        const res = await fetch(api(`/api/tasks/${taskId}/comment`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comment }),
+        });
+        if (res.ok) {
+          set((state) => ({
+            tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, comment } : t),
+          }));
+          return { ok: true };
+        }
+        const data = await res.json().catch(() => ({}));
+        return { ok: false, error: data.error || `Error ${res.status}` };
+      } catch (err: any) {
+        return { ok: false, error: err?.message ?? 'Error de conexión' };
+      }
+    }
+    set((state) => ({
+      tasksData: state.tasksData.map(t => t.id === taskId ? { ...t, comment } : t),
+    }));
+    return { ok: true };
   },
 
   addDepartment: async (dept) => {

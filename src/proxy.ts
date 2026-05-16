@@ -24,12 +24,12 @@ export function proxy(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
 
-  // ── Is the user considered "authenticated" by cookie presence? ────────────
-  const hasSession = req.cookies.has('ias_role'); // set by authStore after login
+  const role       = req.cookies.get('ias_role')?.value; // 'admin' | 'employee' | undefined
+  const hasSession = !!role;
 
-  const isPublic  = PUBLIC_ROUTES.some((r) => pathname === r);
-  const isAdmin   = ADMIN_ROUTES.some((r) => pathname.startsWith(r));
-  const isEmp     = EMPLOYEE_ROUTES.some((r) => pathname.startsWith(r));
+  const isPublic = PUBLIC_ROUTES.some((r)  => pathname === r);
+  const isAdmin  = ADMIN_ROUTES.some((r)   => pathname.startsWith(r));
+  const isEmp    = EMPLOYEE_ROUTES.some((r) => pathname.startsWith(r));
 
   // Not logged in → redirect to login
   if (!hasSession && (isAdmin || isEmp)) {
@@ -38,11 +38,24 @@ export function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Logged in → don't show login page again
+  // Logged in → skip login page
   if (hasSession && isPublic) {
-    const role = req.cookies.get('ias_role')?.value;
-    const url  = req.nextUrl.clone();
+    const url = req.nextUrl.clone();
     url.pathname = role === 'admin' ? '/admin' : '/employee';
+    return NextResponse.redirect(url);
+  }
+
+  // Employee trying to access /admin → bounce to /employee
+  if (hasSession && isAdmin && role !== 'admin') {
+    const url = req.nextUrl.clone();
+    url.pathname = '/employee';
+    return NextResponse.redirect(url);
+  }
+
+  // Admin trying to access /employee → bounce to /admin
+  if (hasSession && isEmp && role !== 'employee') {
+    const url = req.nextUrl.clone();
+    url.pathname = '/admin';
     return NextResponse.redirect(url);
   }
 

@@ -9,7 +9,7 @@ import { useDashboardStore } from "@/store/dashboardStore";
 import type { Employee } from "@/store/dashboardStore";
 
 // ─── Types (mirror Task.js schema) ───────────────────────────────────────────
-interface TaskFormData {
+export interface TaskFormData {
   title: string;
   description?: string;
   priority: "low" | "medium" | "high" | "urgent";
@@ -125,7 +125,18 @@ export function CreateTaskModal({ children, initialData, onSave }: CreateTaskMod
               <label className="text-xs text-gray-400 font-medium">Priority</label>
               <Select value={form.priority} onValueChange={(val) => set("priority", val)}>
                 <SelectTrigger className="bg-[#333333] border-none text-white w-full">
-                  <SelectValue placeholder="Priority" />
+                  <SelectValue placeholder="Priority">
+                    {(value) => {
+                      if (!value) return "Priority";
+                      const p = value as string;
+                      return (
+                        <span className="flex items-center gap-2">
+                          <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: PRIORITY_COLORS[p] }} />
+                          {p.charAt(0).toUpperCase() + p.slice(1)}
+                        </span>
+                      );
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className={selectContentCls} alignItemWithTrigger={false} side="bottom">
                   {(["low", "medium", "high", "urgent"] as const).map((p) => (
@@ -167,7 +178,19 @@ export function CreateTaskModal({ children, initialData, onSave }: CreateTaskMod
               onValueChange={(val) => set("departmentId", val)}
             >
               <SelectTrigger className="bg-[#333333] border-none text-white w-full">
-                <SelectValue placeholder="Select department" />
+                <SelectValue placeholder="Select department">
+                  {(value) => {
+                    if (!value) return "Select department";
+                    const dept = departmentsList.find((d) => d.id === value);
+                    if (!dept) return "Select department";
+                    return (
+                      <span className="flex items-center gap-2">
+                        <span className="inline-block h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dept.color }} />
+                        {dept.name}
+                      </span>
+                    );
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className={selectContentCls} alignItemWithTrigger={false} side="bottom">
                 {departmentsList.length === 0 ? (

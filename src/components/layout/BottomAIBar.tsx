@@ -25,6 +25,7 @@ interface BottomAIBarProps {
   onSend: (text: string) => void;
   isLoading?: boolean;
   aiResponse?: string | null;
+  onDismissResponse?: () => void;
   pendingConfirmation?: AIPendingConfirmation | null;
   onConfirm?: (id: string, approved: boolean) => void;
 }
@@ -47,6 +48,7 @@ export function BottomAIBar({
   onSend,
   isLoading = false,
   aiResponse,
+  onDismissResponse,
   pendingConfirmation,
   onConfirm,
 }: BottomAIBarProps) {
@@ -68,8 +70,19 @@ export function BottomAIBar({
           {/* ── AI response bubble ─────────────────────────────── */}
           {aiResponse && (
             <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 shadow-md w-full">
-              <span className="text-xs font-semibold text-violet-600 mr-2">IA</span>
-              {aiResponse}
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-semibold text-violet-600 mr-1 shrink-0 mt-0.5">IA</span>
+                <span className="flex-1">{aiResponse}</span>
+                {onDismissResponse && !pendingConfirmation && (
+                  <button
+                    onClick={onDismissResponse}
+                    className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors ml-1"
+                    aria-label="Cerrar"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
               {pendingConfirmation && onConfirm && (
                 <div className="mt-3 flex gap-2">
                   <button

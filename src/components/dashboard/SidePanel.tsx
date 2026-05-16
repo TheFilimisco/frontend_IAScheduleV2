@@ -9,6 +9,12 @@ type AccordionSection = {
   items: string[];
 };
 
+export type SidePanelTaskItem = {
+  id: string | number;
+  title: string;
+  priority?: string;
+};
+
 export function SidePanel({
   sections,
   onItemClick,
@@ -18,6 +24,7 @@ export function SidePanel({
   employeesByDept = {},
   tasksByDept = {},
   taskMeta = {},
+  taskItems,
 }: {
   sections: AccordionSection[];
   onItemClick?: (type: string, value: string) => void;
@@ -29,6 +36,8 @@ export function SidePanel({
   tasksByDept?: Record<string, string[]>;
   /** Maps task title → metadata (priority, etc.) */
   taskMeta?: Record<string, { priority?: string }>;
+  /** Full task objects with IDs — when provided, replaces the Tasks section from `sections`. */
+  taskItems?: SidePanelTaskItem[];
 }) {
   // ── Priority helpers ───────────────────────────────────────────────────
   const PRIORITY_ORDER: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
@@ -236,12 +245,17 @@ export function SidePanel({
                       }
 
                       // ── Tareas ────────────────────────────────────────────
+                      // Resolve task ID: use taskItems map when available so
+                      // drag data carries the real DB id, not just the title.
+                      const taskId = taskItems
+                        ? (taskItems.find(t => t.title === item)?.id ?? item)
+                        : item;
                       const isUnassigned = !allAssignedTasks.has(item);
                       const priority = taskMeta[item]?.priority;
                       const dotColor = priority ? PRIORITY_COLORS[priority] : undefined;
                       const dotLabel = priority ? PRIORITY_LABELS[priority] : undefined;
                       return (
-                        <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item }}>
+                        <DraggableItem key={idx} id={dragId} data={{ type: section.title, value: item, taskId }}>
                           <div
                             className={`px-3 py-2 rounded-md flex justify-between items-center text-sm shadow-sm w-full cursor-grab transition-colors ${isActive
                               ? "bg-[#222222] border-l-4 border-blue-500"
